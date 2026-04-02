@@ -1,0 +1,31 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-datasources
+  namespace: observability
+data:
+  datasources.yaml: |
+    apiVersion: 1
+    datasources:
+      - name: Loki
+        type: loki
+        uid: loki
+        access: proxy
+        url: http://loki.observability.svc.cluster.local:3100
+        jsonData:
+          maxLines: 1000
+      - name: Mimir
+        type: prometheus
+        uid: prometheus
+        access: proxy
+        url: http://mimir.observability.svc.cluster.local:9009/prometheus
+        jsonData:
+          prometheusType: Mimir
+          httpMethod: POST
+      - name: Tempo
+        type: tempo
+        uid: tempo
+        access: proxy
+        url: http://tempo.observability.svc.cluster.local:3200
+        jsonData:
+          httpMethod: POST

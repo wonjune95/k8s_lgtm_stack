@@ -1,0 +1,22 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: grafana-ingress
+  namespace: observability
+spec:
+  ingressClassName: nginx
+  rules:
+  - host: grafana.sample.nip.io
+    http:
+      paths:
+      - backend:
+          service:
+            name: grafana
+            port:
+              number: 80
+        path: /
+        pathType: Prefix
+#  tls:
+#  - hosts:  
+#    - grafana.sample.nip.io
+#    secretName: ssl-cc

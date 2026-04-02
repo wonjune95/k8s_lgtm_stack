@@ -1,0 +1,452 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboards
+  namespace: observability
+data:
+  lgtm-dashboard.json: |
+    {
+      "title": "LGTM Cluster Overview",
+      "uid": "lgtm-overview",
+      "refresh": "10s",
+      "schemaVersion": 38,
+      "time": { "from": "now-30m", "to": "now" },
+      "templating": {
+        "list": [
+          {
+            "name": "namespace",
+            "type": "query",
+            "datasource": { "uid": "prometheus", "type": "prometheus" },
+            "definition": "label_values(k8s_pod_cpu_utilization_ratio, namespace)",
+            "query": "label_values(k8s_pod_cpu_utilization_ratio, namespace)",
+            "refresh": 2,
+            "includeAll": true,
+            "allValue": ".*",
+            "current": { "text": "All", "value": "$__all" },
+            "multi": false,
+            "sort": 1
+          },
+          {
+            "name": "node",
+            "type": "query",
+            "datasource": { "uid": "prometheus", "type": "prometheus" },
+            "definition": "label_values(system_cpu_load_average_1m, node)",
+            "query": "label_values(system_cpu_load_average_1m, node)",
+            "refresh": 2,
+            "includeAll": true,
+            "allValue": ".*",
+            "current": { "text": "All", "value": "$__all" },
+            "multi": false,
+            "sort": 1
+          },
+          {
+            "name": "log_namespace",
+            "label": "Log Namespace",
+            "type": "query",
+            "datasource": { "uid": "loki", "type": "loki" },
+            "definition": "label_values({k8s_namespace_name=~\".+\"}, k8s_namespace_name)",
+            "query": "label_values({k8s_namespace_name=~\".+\"}, k8s_namespace_name)",
+            "refresh": 2,
+            "includeAll": true,
+            "allValue": ".+",
+            "current": { "text": "All", "value": "$__all" },
+            "multi": false,
+            "sort": 1
+          }
+        ]
+      },
+      "panels": [
+        {
+          "type": "row",
+          "title": "🖥️ Node Metrics",
+          "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+          "collapsed": false
+        },
+        {
+          "title": "Node CPU Usage (%)",
+          "type": "timeseries",
+          "datasource": { "uid": "prometheus", "type": "prometheus" },
+          "gridPos": { "h": 8, "w": 8, "x": 0, "y": 1 },
+          "targets": [
+            {
+              "expr": "100 - avg by(node) (rate(system_cpu_time_seconds_total{state=\"idle\", node=~\"$node\"}[5m])) * 100",
+              "legendFormat": "{{node}}",
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 15, "lineInterpolation": "smooth", "showPoints": "never" },
+              "unit": "percent", "min": 0, "max": 100,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "yellow", "value": 60 },
+                  { "color": "red", "value": 85 }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "title": "Node Memory Usage",
+          "type": "timeseries",
+          "datasource": { "uid": "prometheus", "type": "prometheus" },
+          "gridPos": { "h": 8, "w": 8, "x": 8, "y": 1 },
+          "targets": [
+            {
+              "expr": "sum by(node) (system_memory_usage_bytes{state=\"used\", node=~\"$node\"})",
+              "legendFormat": "{{node}}",
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 15, "lineInterpolation": "smooth", "showPoints": "never" },
+              "unit": "bytes", "min": 0,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "yellow", "value": 12000000000 },
+                  { "color": "red", "value": 14000000000 }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "title": "System Load Average",
+          "type": "timeseries",
+          "datasource": { "uid": "prometheus", "type": "prometheus" },
+          "gridPos": { "h": 8, "w": 8, "x": 16, "y": 1 },
+          "targets": [
+            {
+              "expr": "system_cpu_load_average_1m{node=~\"$node\"}",
+              "legendFormat": "{{node}} 1m",
+              "refId": "A"
+            },
+            {
+              "expr": "system_cpu_load_average_5m{node=~\"$node\"}",
+              "legendFormat": "{{node}} 5m",
+              "refId": "B"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 10, "lineInterpolation": "smooth", "showPoints": "never" },
+              "min": 0
+            }
+          }
+        },
+        {
+          "title": "Network I/O",
+          "type": "timeseries",
+          "datasource": { "uid": "prometheus", "type": "prometheus" },
+          "gridPos": { "h": 8, "w": 8, "x": 0, "y": 9 },
+          "targets": [
+            {
+              "expr": "sum by(node) (rate(system_network_io_bytes_total{direction=\"receive\", node=~\"$node\"}[5m]))",
+              "legendFormat": "{{node}} rx",
+              "refId": "A"
+            },
+            {
+              "expr": "sum by(node) (rate(system_network_io_bytes_total{direction=\"transmit\", node=~\"$node\"}[5m]))",
+              "legendFormat": "{{node}} tx",
+              "refId": "B"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 10, "lineInterpolation": "smooth", "showPoints": "never" },
+              "unit": "Bps", "min": 0
+            }
+          }
+        },
+        {
+          "title": "Disk I/O",
+          "type": "timeseries",
+          "datasource": { "uid": "prometheus", "type": "prometheus" },
+          "gridPos": { "h": 8, "w": 8, "x": 8, "y": 9 },
+          "targets": [
+            {
+              "expr": "sum by(node) (rate(system_disk_io_bytes_total{direction=\"read\", node=~\"$node\"}[5m]))",
+              "legendFormat": "{{node}} read",
+              "refId": "A"
+            },
+            {
+              "expr": "sum by(node) (rate(system_disk_io_bytes_total{direction=\"write\", node=~\"$node\"}[5m]))",
+              "legendFormat": "{{node}} write",
+              "refId": "B"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 10, "lineInterpolation": "smooth", "showPoints": "never" },
+              "unit": "Bps", "min": 0
+            }
+          }
+        },
+        {
+          "title": "Filesystem Usage (%)",
+          "type": "gauge",
+          "datasource": { "uid": "prometheus", "type": "prometheus" },
+          "gridPos": { "h": 8, "w": 8, "x": 16, "y": 9 },
+          "targets": [
+            {
+              "expr": "100 * sum by(node) (system_filesystem_usage_bytes{node=~\"$node\", mountpoint=\"/hostfs\", state=\"used\"}) / (sum by(node) (system_filesystem_usage_bytes{node=~\"$node\", mountpoint=\"/hostfs\", state=\"used\"}) + sum by(node) (system_filesystem_usage_bytes{node=~\"$node\", mountpoint=\"/hostfs\", state=\"free\"}))",
+              "legendFormat": "{{node}}",
+              "refId": "A",
+              "instant": true
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percent", "min": 0, "max": 100,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "yellow", "value": 70 },
+                  { "color": "red", "value": 85 }
+                ]
+              }
+            }
+          },
+          "options": {
+            "reduceOptions": { "calcs": ["lastNotNull"] }
+          }
+        },
+
+        {
+          "type": "row",
+          "title": "📦 Pod / Container Metrics (Kubelet)",
+          "gridPos": { "h": 1, "w": 24, "x": 0, "y": 17 },
+          "collapsed": false
+        },
+        {
+          "title": "Top 10 Pod CPU Usage",
+          "type": "timeseries",
+          "datasource": { "uid": "prometheus", "type": "prometheus" },
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 18 },
+          "targets": [
+            {
+              "expr": "topk(10, sum by(k8s_pod_name, namespace) (k8s_pod_cpu_utilization_ratio{namespace=~\"$namespace\"}))",
+              "legendFormat": "{{namespace}}/{{k8s_pod_name}}",
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "custom": { "drawStyle": "line", "lineWidth": 1, "fillOpacity": 10, "lineInterpolation": "smooth", "showPoints": "never" },
+              "unit": "percentunit", "min": 0
+            }
+          }
+        },
+        {
+          "title": "Top 10 Pod Memory Usage",
+          "type": "timeseries",
+          "datasource": { "uid": "prometheus", "type": "prometheus" },
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 18 },
+          "targets": [
+            {
+              "expr": "topk(10, sum by(k8s_pod_name, namespace) (k8s_pod_memory_working_set_bytes{namespace=~\"$namespace\"}))",
+              "legendFormat": "{{namespace}}/{{k8s_pod_name}}",
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "custom": { "drawStyle": "line", "lineWidth": 1, "fillOpacity": 10, "lineInterpolation": "smooth", "showPoints": "never" },
+              "unit": "bytes", "min": 0
+            }
+          }
+        },
+        {
+          "title": "Container CPU Usage by Namespace",
+          "type": "timeseries",
+          "datasource": { "uid": "prometheus", "type": "prometheus" },
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 26 },
+          "targets": [
+            {
+              "expr": "sum by(namespace) (container_cpu_utilization_ratio{namespace=~\"$namespace\"})",
+              "legendFormat": "{{namespace}}",
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 20, "lineInterpolation": "smooth", "showPoints": "never", "stacking": { "mode": "normal" } },
+              "unit": "percentunit", "min": 0
+            }
+          }
+        },
+        {
+          "title": "Container Memory by Namespace",
+          "type": "timeseries",
+          "datasource": { "uid": "prometheus", "type": "prometheus" },
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 26 },
+          "targets": [
+            {
+              "expr": "sum by(namespace) (container_memory_working_set_bytes{namespace=~\"$namespace\"})",
+              "legendFormat": "{{namespace}}",
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 20, "lineInterpolation": "smooth", "showPoints": "never", "stacking": { "mode": "normal" } },
+              "unit": "bytes", "min": 0
+            }
+          }
+        },
+        {
+          "title": "Pod Network I/O",
+          "type": "timeseries",
+          "datasource": { "uid": "prometheus", "type": "prometheus" },
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 34 },
+          "targets": [
+            {
+              "expr": "topk(10, sum by(k8s_pod_name, namespace) (rate(k8s_pod_network_io_bytes_total{direction=\"receive\", namespace=~\"$namespace\"}[5m])))",
+              "legendFormat": "{{namespace}}/{{k8s_pod_name}} rx",
+              "refId": "A"
+            },
+            {
+              "expr": "topk(10, sum by(k8s_pod_name, namespace) (rate(k8s_pod_network_io_bytes_total{direction=\"transmit\", namespace=~\"$namespace\"}[5m])))",
+              "legendFormat": "{{namespace}}/{{k8s_pod_name}} tx",
+              "refId": "B"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "custom": { "drawStyle": "line", "lineWidth": 1, "fillOpacity": 10, "lineInterpolation": "smooth", "showPoints": "never" },
+              "unit": "Bps", "min": 0
+            }
+          }
+        },
+        {
+          "title": "Container Restarts",
+          "type": "stat",
+          "datasource": { "uid": "prometheus", "type": "prometheus" },
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 34 },
+          "targets": [
+            {
+              "expr": "sum by(namespace, k8s_pod_name) (increase(k8s_pod_network_errors_total{namespace=~\"$namespace\"}[1h])) > 0",
+              "legendFormat": "{{namespace}}/{{k8s_pod_name}}",
+              "refId": "A",
+              "instant": true
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "yellow", "value": 1 },
+                  { "color": "red", "value": 5 }
+                ]
+              }
+            }
+          },
+          "options": {
+            "reduceOptions": { "calcs": ["lastNotNull"] },
+            "textMode": "auto",
+            "colorMode": "background"
+          }
+        },
+
+        {
+          "type": "row",
+          "title": "📋 Pod Logs (Loki)",
+          "gridPos": { "h": 1, "w": 24, "x": 0, "y": 42 },
+          "collapsed": false
+        },
+        {
+          "title": "Log Volume by Namespace",
+          "type": "timeseries",
+          "datasource": { "uid": "loki", "type": "loki" },
+          "gridPos": { "h": 6, "w": 24, "x": 0, "y": 43 },
+          "targets": [
+            {
+              "expr": "sum by(k8s_namespace_name) (count_over_time({k8s_namespace_name=~\".+\"}[$__interval]))",
+              "legendFormat": "{{k8s_namespace_name}}",
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "custom": { "drawStyle": "bars", "fillOpacity": 50, "stacking": { "mode": "normal" } }
+            }
+          }
+        },
+        {
+          "title": "Error Logs",
+          "type": "logs",
+          "datasource": { "uid": "loki", "type": "loki" },
+          "gridPos": { "h": 10, "w": 24, "x": 0, "y": 49 },
+          "targets": [
+            {
+              "expr": "{k8s_namespace_name=~\"$log_namespace\"} |~ \"(?i)(error|err|exception|fatal|panic|fail)\"",
+              "refId": "A"
+            }
+          ],
+          "options": {
+            "showLabels": true,
+            "showTime": true,
+            "wrapLogMessage": true,
+            "enableLogDetails": true,
+            "sortOrder": "Descending"
+          }
+        },
+        {
+          "title": "Live Pod Logs",
+          "type": "logs",
+          "datasource": { "uid": "loki", "type": "loki" },
+          "gridPos": { "h": 14, "w": 24, "x": 0, "y": 59 },
+          "targets": [
+            {
+              "expr": "{k8s_namespace_name=~\"$log_namespace\"}",
+              "refId": "A"
+            }
+          ],
+          "options": {
+            "showLabels": true,
+            "showTime": true,
+            "wrapLogMessage": true,
+            "enableLogDetails": true,
+            "sortOrder": "Descending"
+          }
+        },
+
+        {
+          "type": "row",
+          "title": "🔍 Traces (Tempo)",
+          "gridPos": { "h": 1, "w": 24, "x": 0, "y": 73 },
+          "collapsed": false
+        },
+        {
+          "title": "Recent Traces",
+          "type": "table",
+          "datasource": { "uid": "tempo", "type": "tempo" },
+          "gridPos": { "h": 12, "w": 24, "x": 0, "y": 74 },
+          "targets": [
+            {
+              "queryType": "search",
+              "refId": "A",
+              "limit": 20,
+              "filters": []
+            }
+          ],
+          "options": {
+            "showHeader": true
+          },
+          "fieldConfig": {
+            "defaults": {
+              "noValue": "트레이스 데이터가 없습니다. 애플리케이션에서 OTLP로 트레이스를 전송하면 이곳에 표시됩니다."
+            }
+          }
+        }
+      ]
+    }
