@@ -50,9 +50,9 @@ kubectl apply -f otel/
 ### 3. 접속 정보
 - **Grafana 접속**: [http://grafana.sample.nip.io](http://grafana.sample.nip.io) (Ingress 설정 필요)
 - **기본 계정**: `admin` / `admin`
-<img width="1917" height="918" alt="image" src="https://github.com/user-attachments/assets/5c34a123-03d0-4f83-9f37-6c9ac6090c1b" />
-<img width="1917" height="918" alt="image" src="https://github.com/user-attachments/assets/cad80fd0-58cd-4b4d-a925-a24e3baec842" />
-<img width="1919" height="920" alt="image" src="https://github.com/user-attachments/assets/b53a32d6-e8fe-4453-b7e4-715e5a5eaf9e" />
+<img width="1917" height="918" alt="스크린샷 2026-04-02 143211" src="https://github.com/user-attachments/assets/4732b624-b02a-417b-9da9-b5fa2a054dc6" />
+<img width="1917" height="918" alt="스크린샷 2026-04-02 143246" src="https://github.com/user-attachments/assets/c48bf2d3-57c7-4757-b0d3-75c3b9693b58" />
+<img width="1919" height="920" alt="스크린샷 2026-04-02 143303" src="https://github.com/user-attachments/assets/367c9cdb-12aa-4f47-b96c-b5d68a97356b" />
 
 ## 📊 Monitoring Features
 - **Node Metrics**: CPU, Memory, Disk, Network 상태 모니터링
