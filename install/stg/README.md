@@ -1,7 +1,7 @@
 # stg — otel-collector + Istio 트레이싱 overlay
 
 저장소(Loki·Mimir·Tempo·Grafana)는 전부 mgmt에 있다. 이 클러스터는 수집만 한다.
-전체 순서는 `../README.md`. 이 폴더는 **템플릿**이라 `REPLACE_ME_*`가 남아 있고, 루트의 `configure.sh`가 `build/stg/`에 채운 사본을 만든다.
+전체 순서는 `../../README.md`. 이 폴더는 **템플릿**이라 `REPLACE_ME_*`가 남아 있고, 루트의 `configure.sh`가 `build/stg/`에 채운 사본을 만든다.
 dev / stg / prod 폴더는 `CLUSTER_NAME`(`stg`)만 다르다.
 
 ## 하는 일
@@ -20,14 +20,14 @@ dev / stg / prod 폴더는 `CLUSTER_NAME`(`stg`)만 다르다.
 
 ## 사전 조건
 
-- mgmt가 먼저 설치돼 있고 `../README.md` 2단계의 `chk` 점검에서 이 클러스터 토큰이 통과함
+- mgmt가 먼저 설치돼 있고 `../../README.md` 2단계의 `chk` 점검에서 이 클러스터 토큰이 통과함
 - Istio 컨트롤플레인 설치됨 + 설치에 쓴 IstioOperator 파일 + 같은 버전 `istioctl`
 - 앱 네임스페이스에 `istio-injection: enabled`, 앱 파드에 `app` 라벨
 - otel은 GID 0(UID 65534)으로 뜬다. `/var/log/pods`가 750으로 잠긴 노드가 많아서다
 
 ## 설치
 
-`../README.md` 설치 3단계 블록을 `C=stg` 값으로 실행한다. 블록이 `build/stg/install.sh` → Istio overlay → 샘플링 설정 → 앱 파드 재시작까지 한다.
+`../../README.md` 설치 3단계 블록을 `C=stg` 값으로 실행한다. 블록이 `build/stg/install.sh` → Istio overlay → 샘플링 설정 → 앱 파드 재시작까지 한다.
 `install.sh`만 따로 돌릴 때:
 
 ```bash
@@ -59,4 +59,4 @@ done
 - **샘플링:** `02-istio/telemetry-sampling.yaml`의 `randomSamplingPercentage`. 트래픽 대비 Tempo 저장량이 과하면 낮춘다.
   트레이스 건수와 저장량만 줄고, 메트릭 기반 패널(서비스 그래프·RED)은 모든 요청을 센다. 바꾸면 apply만 하면 된다(재시작 불필요).
 - **리소스:** otel-collector는 CPU 25m 요청 / 메모리 limit 512Mi(memory_limiter 80%). 로그량이 많은 노드는 `01-otel/daemonset.yaml`에서 올린다.
-- **토큰 교체:** `../README.md` 운영 절. 이 클러스터 `install.sh`가 Secret 변경을 감지해 재시작까지 한다.
+- **토큰 교체:** `../../README.md` 운영 절. 이 클러스터 `install.sh`가 Secret 변경을 감지해 재시작까지 한다.

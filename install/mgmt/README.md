@@ -1,7 +1,7 @@
 # mgmt — 중앙 Loki · Mimir · Tempo · Grafana
 
 dev / stg / prod의 otel이 push하는 로그·메트릭·트레이스를 받아 저장하고, Grafana에서 조회한다.
-전체 순서는 `../README.md`. 이 폴더는 **템플릿**이라 `REPLACE_ME_*`가 남아 있고, 루트의 `configure.sh`가 `build/mgmt/`에 채운 사본을 만든다.
+전체 순서는 `../../README.md`. 이 폴더는 **템플릿**이라 `REPLACE_ME_*`가 남아 있고, 루트의 `configure.sh`가 `build/mgmt/`에 채운 사본을 만든다.
 
 ## 구성
 
@@ -47,7 +47,7 @@ kubectl exec -n monitoring deploy/grafana -- wget -qO- "http://mimir.monitoring.
 kubectl exec -n monitoring deploy/grafana -- wget -qO- "http://loki.monitoring.svc.cluster.local:3100/ready"
 ```
 
-push 경로를 토큰으로 점검하는 `chk` 블록은 `../README.md` 설치 2단계에 있다.
+push 경로를 토큰으로 점검하는 `chk` 블록은 `../../README.md` 설치 2단계에 있다.
 
 ## 운영 메모
 

@@ -1,0 +1,88 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="640" viewBox="0 0 1400 640" font-family="Pretendard, 'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', Helvetica, Arial, sans-serif" font-size="15">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#4f46e5"/>
+    </marker>
+    <marker id="arrowg" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#64748b"/>
+    </marker>
+  </defs>
+  <rect width="1400" height="640" fill="#ffffff"/>
+
+  <!-- 앱 클러스터 -->
+  <rect x="30" y="40" width="540" height="560" rx="14" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1.5"/>
+  <text x="50" y="72" font-size="19" font-weight="700" fill="#0f172a">앱 클러스터 × 3  (dev / stg / prod)</text>
+  <text x="50" y="94" fill="#475569">Istio 사이드카 · 각 클러스터에 같은 구성, CLUSTER_NAME만 다름</text>
+
+  <rect x="50" y="118" width="500" height="118" rx="10" fill="#ffffff" stroke="#94a3b8"/>
+  <text x="66" y="142" font-weight="700" fill="#0f172a">앱 파드 (istio-proxy 사이드카)</text>
+  <text x="66" y="166" fill="#334155">· 컨테이너 로그 → /var/log/pods</text>
+  <text x="66" y="188" fill="#334155">· Envoy 표준 메트릭 (istio_requests_total …)</text>
+  <text x="66" y="210" fill="#334155">· Envoy 트레이스 스팬 (zipkin, 샘플링 비율은 Telemetry)</text>
+
+  <rect x="50" y="262" width="500" height="186" rx="10" fill="#eef2ff" stroke="#6366f1" stroke-width="1.5"/>
+  <text x="66" y="288" font-weight="700" fill="#312e81">otel-collector  (DaemonSet · 노드마다 1개)</text>
+  <text x="66" y="314" fill="#1e293b">① 앱 로그 tail  (kube-system · istio-proxy 제외)</text>
+  <text x="66" y="338" fill="#1e293b">② prometheus.io/scrape 파드 스크레이프 (Istio 메트릭)</text>
+  <text x="66" y="362" fill="#1e293b">③ 자기 노드 kubelet 사용량 (kubeletstats)</text>
+  <text x="66" y="386" fill="#1e293b">④ zipkin :9411 / OTLP 수신 → 트레이스</text>
+  <text x="66" y="414" fill="#475569" font-size="13.5">mgmt 장애 시 로그·트레이스는 디스크 큐, 메트릭은 메모리에 보관 후 재전송</text>
+  <text x="66" y="434" fill="#475569" font-size="13.5">서버 인증서는 ConfigMap mgmt-ca로 검증 · 토큰은 Secret</text>
+
+  <rect x="50" y="472" width="500" height="106" rx="10" fill="#eef2ff" stroke="#6366f1" stroke-width="1.5"/>
+  <text x="66" y="498" font-weight="700" fill="#312e81">otel-cluster  (Deployment · 클러스터당 1개)</text>
+  <text x="66" y="524" fill="#1e293b">· 파드 phase · 재시작/대기 사유 · 노드 condition · request/limit</text>
+  <text x="66" y="548" fill="#1e293b">· 쿠버네티스 이벤트 → 로그로 전송 (app="k8s-events")</text>
+
+  <!-- 앱 파드 → otel -->
+  <path d="M300,236 L300,262" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrowg)"/>
+
+  <!-- otel → 버스 → mgmt -->
+  <path d="M550,355 L700,355" stroke="#4f46e5" stroke-width="2.2"/>
+  <path d="M550,525 L700,525" stroke="#4f46e5" stroke-width="2.2"/>
+  <path d="M700,525 L700,212" stroke="#4f46e5" stroke-width="2.2"/>
+  <path d="M700,212 L903,212" stroke="#4f46e5" stroke-width="2.2" marker-end="url(#arrow)"/>
+  <path d="M700,320 L903,320" stroke="#4f46e5" stroke-width="2.2" marker-end="url(#arrow)"/>
+  <path d="M700,428 L903,428" stroke="#4f46e5" stroke-width="2.2" marker-end="url(#arrow)"/>
+  <text x="708" y="204" fill="#312e81" font-size="13">/otlp  (로그)</text>
+  <text x="708" y="312" fill="#312e81" font-size="13">/api/v1/push  (메트릭)</text>
+  <text x="708" y="420" fill="#312e81" font-size="13">/v1/traces  (트레이스)</text>
+
+  <rect x="590" y="78" width="240" height="72" rx="8" fill="#ffffff" stroke="#c7d2fe"/>
+  <text x="710" y="102" text-anchor="middle" font-weight="700" fill="#312e81">HTTPS + BasicAuth</text>
+  <text x="710" y="122" text-anchor="middle" fill="#475569" font-size="13">클러스터마다 토큰 3개</text>
+  <text x="710" y="140" text-anchor="middle" fill="#475569" font-size="13">(로그 · 메트릭 · 트레이스)</text>
+
+  <!-- mgmt 클러스터 -->
+  <rect x="840" y="40" width="530" height="560" rx="14" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1.5"/>
+  <text x="860" y="72" font-size="19" font-weight="700" fill="#0f172a">mgmt 클러스터  (모니터링)</text>
+  <text x="860" y="94" fill="#475569">저장·조회는 여기서만 · Traefik Gateway API (HTTPRoute + Middleware)</text>
+
+  <rect x="860" y="112" width="490" height="56" rx="8" fill="#fff7ed" stroke="#fb923c" stroke-width="1.5"/>
+  <text x="1105" y="134" text-anchor="middle" font-weight="700" fill="#7c2d12">Traefik Gateway  ·  HTTPS listener  ·  BasicAuth Middleware ×3</text>
+  <text x="1105" y="156" text-anchor="middle" fill="#7c2d12" font-size="12.5">HTTPRoute: /otlp → Loki · /api/v1/push → Mimir · /v1/traces → Tempo · / → Grafana</text>
+
+  <rect x="905" y="182" width="445" height="60" rx="10" fill="#ecfdf5" stroke="#10b981" stroke-width="1.5"/>
+  <text x="921" y="206" font-weight="700" fill="#064e3b">Loki 3.5</text>
+  <text x="921" y="228" fill="#1e293b">로그 · 15일 보관 · PVC 100Gi · cluster 라벨로 구분</text>
+
+  <rect x="905" y="290" width="445" height="60" rx="10" fill="#ecfdf5" stroke="#10b981" stroke-width="1.5"/>
+  <text x="921" y="314" font-weight="700" fill="#064e3b">Mimir 2.11</text>
+  <text x="921" y="336" fill="#1e293b">메트릭 · 15일 보관 · PVC 100Gi · 서비스 그래프·RED의 출처</text>
+
+  <rect x="905" y="398" width="445" height="60" rx="10" fill="#ecfdf5" stroke="#10b981" stroke-width="1.5"/>
+  <text x="921" y="422" font-weight="700" fill="#064e3b">Tempo 2.6</text>
+  <text x="921" y="444" fill="#1e293b">트레이스 · 15일 보관 · PVC 100Gi · TraceQL 검색 · 로그 연결</text>
+
+  <rect x="905" y="486" width="445" height="96" rx="10" fill="#fefce8" stroke="#eab308" stroke-width="1.5"/>
+  <text x="921" y="510" font-weight="700" fill="#713f12">Grafana 11.5</text>
+  <text x="921" y="532" fill="#1e293b">데이터소스 3개 · 대시보드 2개 자동 프로비저닝 · PVC 30Gi</text>
+  <text x="921" y="554" fill="#1e293b">홈: 서비스 메시 개요 (상태 칸 · KPI · 서비스 그래프 · RED)</text>
+  <text x="921" y="574" fill="#1e293b">쿠버네티스 클러스터 상태 (노드 · 파드 · 재시작 · 이벤트)</text>
+
+  <!-- Grafana ← 저장소 (조회, 점선) -->
+  <path d="M1350,212 L1362,212 L1362,534 L1352,534" stroke="#64748b" stroke-width="1.5" fill="none" stroke-dasharray="5,4" marker-end="url(#arrowg)"/>
+  <path d="M1350,320 L1362,320" stroke="#64748b" stroke-width="1.5" stroke-dasharray="5,4"/>
+  <path d="M1350,428 L1362,428" stroke="#64748b" stroke-width="1.5" stroke-dasharray="5,4"/>
+  <text x="1352" y="596" text-anchor="end" fill="#64748b" font-size="13">점선: Grafana 조회</text>
+</svg>

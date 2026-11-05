@@ -49,7 +49,7 @@ fi
 
 # 2. 렌더링 — 템플릿은 건드리지 않고 build/ 에 복사한 뒤 자리표시자를 채운다
 rm -rf build && mkdir build
-for d in mgmt $CLUSTERS; do cp -r "$d" build/; done
+for d in mgmt $CLUSTERS; do cp -r "install/$d" build/; done
 files=$(find build -type f -name '*.yaml')
 # GATEWAY_NAMESPACE를 GATEWAY_NAME보다 먼저 (REPLACE_ME_GATEWAY_NAME이 REPLACE_ME_GATEWAY_NAMESPACE의 앞부분이라서)
 sed -i \

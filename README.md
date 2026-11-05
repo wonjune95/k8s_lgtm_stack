@@ -7,19 +7,9 @@ OpenTelemetry Collector만 띄워 로그·메트릭·트레이스를 mgmt로 pus
 
 ## 구조
 
-```
-  dev / stg / prod  (앱 클러스터, Istio 사이드카)                   mgmt  (모니터링 클러스터)
- ┌───────────────────────────────────────────┐                  ┌───────────────────────────────────────┐
- │ otel-collector  (DaemonSet, 노드마다)       │   HTTPS + BasicAuth │ Traefik Gateway (HTTPRoute + Middleware) │
- │  · 앱 컨테이너 로그 tail        ───────────┼──── /otlp ────────▶│   Loki   (로그,     15일, PVC 100Gi)     │
- │  · Envoy·Istio 표준 메트릭 스크레이프 ─────┼── /api/v1/push ──▶│   Mimir  (메트릭,   15일, PVC 100Gi)     │
- │  · kubelet 노드·파드·컨테이너 사용량   ────┤                    │   Tempo  (트레이스, 15일, PVC 100Gi)     │
- │  · Envoy 트레이스(zipkin) 수신   ──────────┼── /v1/traces ────▶│   Grafana (대시보드 2개·데이터소스 3개   │
- │ otel-cluster    (Deployment 1개)            │                    │            자동 프로비저닝, PVC 30Gi)    │
- │  · 파드 상태·재시작·노드 condition ────────┘                    └───────────────────────────────────────┘
- │  · 쿠버네티스 이벤트 → Loki
- └───────────────────────────────────────────┘
-```
+![구조](docs/architecture.png)
+
+(원본: `docs/architecture.svg`)
 
 - **인증:** 클러스터마다 토큰 3개(로그·메트릭·트레이스). 평문은 그 클러스터의 Secret에, 해시는 mgmt Traefik BasicAuth에 들어간다.
   `configure.sh`가 둘 다 만들어 짝을 맞춘다. 하나가 유출돼도 그 클러스터의 토큰만 바꾸면 된다.
@@ -35,13 +25,16 @@ OpenTelemetry Collector만 띄워 로그·메트릭·트레이스를 mgmt로 pus
 .
 ├── env.example        # 환경값: 도메인 4개, StorageClass, Gateway 이름, CA 경로, (선택) 미러 레지스트리
 ├── configure.sh       # env + secrets.env(없으면 생성) → build/ 렌더링. 템플릿은 건드리지 않는다
-├── mgmt/              # 00-namespace, 01-loki, 02-mimir, 03-grafana(dashboards/), 04-tempo, install.sh
-├── dev/ stg/ prod/    # 00-namespace(mgmt CA), 01-otel, 02-istio(overlay·샘플링), install.sh — CLUSTER_NAME만 다르다
+├── install/
+│   ├── mgmt/          # 00-namespace, 01-loki, 02-mimir, 03-grafana(dashboards/), 04-tempo, install.sh
+│   ├── dev/           # 00-namespace(mgmt CA), 01-otel, 02-istio(overlay·샘플링), install.sh
+│   ├── stg/           # dev와 같고 CLUSTER_NAME만 stg
+│   └── prod/          # dev와 같고 CLUSTER_NAME만 prod
 ├── build/             # configure.sh 산출물 (gitignore). install.sh는 여기서 실행한다
-└── docs/              # 대시보드 스크린샷
+└── docs/              # 구조도, 대시보드 스크린샷
 ```
 
-템플릿(`mgmt/`, `dev/` …)에는 `REPLACE_ME_*` 자리표시자가 있어서 그대로 apply할 수 없다. 값을 채운 사본이 `build/`에 생기고, `env`·`secrets.env`·`build/`는 커밋되지 않는다.
+템플릿(`install/mgmt/`, `install/dev/` …)에는 `REPLACE_ME_*` 자리표시자가 있어서 그대로 apply할 수 없다. 값을 채운 사본이 `build/`에 생기고, `env`·`secrets.env`·`build/`는 커밋되지 않는다.
 
 ## 사전 조건
 
@@ -89,7 +82,7 @@ chk() { curl -s -o /dev/null -w '%{http_code}' --cacert "$MGMT_CA_PEM" ${2:+-u "
 L=https://$LOKI_DOMAIN/otlp/v1/logs; M=https://$MIMIR_DOMAIN/api/v1/push; T=https://$TEMPO_DOMAIN/v1/traces
 echo "인증 없음: loki=$(chk $L) mimir=$(chk $M) tempo=$(chk $T)"                                   # 전부 401
 for c in dev stg prod; do C=${c^^}; l=${C}_LOKI_TOKEN; m=${C}_MIMIR_TOKEN; t=${C}_TEMPO_TOKEN
-  echo "$c: loki=$(chk $L "$c:${!l}") mimir=$(chk $M "$c:${!m}") tempo=$(chk $T "$c:${!t}")"; done   # 401이 아니면 통과(빈 요청이라 400/415 정상)
+  echo "$c: loki=$(chk $L "$c:${!l}") mimir=$(chk $M "$c:${!m}") tempo=$(chk $T "$c:${!t}")"; done   # 401이 아니면 통과 (빈 요청이라 loki 422, mimir 400, tempo 200이 정상)
 ```
 
 | 결과 | 원인 |
@@ -132,9 +125,14 @@ prod는 `02-istio/telemetry-sampling.yaml`의 `randomSamplingPercentage: 100`이
 
 서비스 그래프와 트레이스는 선택한 시간 범위 안에 요청이 있어야 나온다.
 
+**검증 이력** — 2026-11-05, kind 클러스터 2개(mgmt·dev, Kubernetes 1.31.14), Traefik 3.6.7, Istio 1.30.2, 공개 이미지 그대로.
+이 README의 1~3단계 블록을 그대로 실행해 설치했고, 비메시 파드에서 10분 부하(게이트웨이 2,400건 + 직접 호출 600건)를 걸어
+서비스 그래프 수치(240 / 300 / 60 req/min, 에러 25 / 20 / 0 %)가 실제 호출 수와 일치하는 것을 확인했다. 위 검증표의 행은 모두 통과했고,
+아래 스크린샷은 그 환경에서 찍은 것이다. 확인하지 않은 것: 다중 노드, stg·prod 동시 설치, 사설 미러 레지스트리, 실제 내부 DNS(시험은 nip.io).
+
 ## 대시보드
 
-둘 다 `mgmt/03-grafana/dashboards/`의 JSON이고 `install.sh`가 ConfigMap으로 프로비저닝한다(Grafana UI에서 수정 불가, 파일을 고쳐 재배포).
+둘 다 `install/mgmt/03-grafana/dashboards/`의 JSON이고 `install.sh`가 ConfigMap으로 프로비저닝한다(Grafana UI에서 수정 불가, 파일을 고쳐 재배포).
 
 **서비스 메시 개요** (홈) — 클러스터·네임스페이스·앱 변수. 맨 위 상태 6칸(문제 파드, 재시작, 노드, 전송 실패 …), KPI 6개,
 Istio 메트릭 기반 서비스 그래프(`req/min · % err`), 서비스별 요청률·5xx·P95, 응답 코드, 요약 표, 트레이스 검색, 로그.
@@ -161,6 +159,7 @@ Istio 메트릭 기반 서비스 그래프(`req/min · % err`), 서비스별 요
 ## 문제가 생기면
 
 ```bash
+set -a; . ./env; set +a                       # 저장소 루트에서. 앱 클러스터 context로 전환한 뒤 실행
 kubectl -n monitoring get pods -o wide
 kubectl -n monitoring describe pod -l app.kubernetes.io/name=otel-collector | sed -n '/^Events:/,$p'
 kubectl -n monitoring logs ds/otel-collector --tail=300 | grep -E 'error|failed' | tail -5
