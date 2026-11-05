@@ -1,0 +1,29 @@
+# 기존 Istio 설치에 트레이싱용
+# meshConfig를 "덧씌우는" overlay다.
+#
+# ⚠️ 이 파일 단독으로 `istioctl install -f operator.yaml` 하면 patch가 아니라
+# default 프로필 + 이 meshConfig로 "재설치"된다 — 기존 설치의 다른 설정
+# (outboundTrafficPolicy, proxyMetadata, gateway 구성 등)이 전부 기본값으로 돌아간다.
+# 반드시 기존 설치에 썼던 IstioOperator 파일 뒤에 붙여서 적용:
+#   istioctl install -f <기존 IstioOperator.yaml> -f 02-istio/operator.yaml -y
+# (리스트는 병합이 아니라 교체 — 기존 파일에 meshConfig.extensionProviders가
+#  있으면 그 항목들을 이 파일에도 같이 적어야 사라지지 않는다)
+# (IstioOperator는 CRD가 아니라 istioctl이 직접 소비하는 파일이라 클러스터에
+# 리소스로 안 남는다 — 실제 적용 결과는 istio-system/istio ConfigMap에서 확인)
+#
+# 전제조건: Istio 컨트롤플레인과 istioctl 바이너리는 이 저장소 범위 밖 — 먼저 설치돼 있어야 한다.
+apiVersion: install.istio.io/v1alpha1
+kind: IstioOperator
+spec:
+  meshConfig:
+    enableTracing: true
+    enablePrometheusMerge: true
+    defaultProviders:
+      tracing: ["zipkin"]
+    extensionProviders:
+      # Envoy 스팬을 otel-collector가 받아 mgmt 중앙 Tempo로 보낸다
+      # (Envoy는 클러스터 내부 DNS로만 보낼 수 있어 otel-collector를 거친다)
+      - name: zipkin
+        zipkin:
+          service: otel-collector.monitoring.svc.cluster.local
+          port: 9411

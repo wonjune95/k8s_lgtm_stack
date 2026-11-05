@@ -1,0 +1,63 @@
+# 여러 app 클러스터(dev/stg/prod)의 로그를 이 Loki
+# 하나로 모으므로, otlp_config.resource_attributes에 "cluster" 인덱스 라벨을
+# 추가했다 (app-cluster의 otel-collector가 transform processor로 채워서 보냄).
+apiVersion: v1
+data:
+  local-config.yaml: |
+    auth_enabled: false
+
+    server:
+      http_listen_port: 3100
+
+    common:
+      instance_addr: 127.0.0.1
+      path_prefix: /loki
+      storage:
+        filesystem:
+          chunks_directory: /loki/chunks
+          rules_directory: /loki/rules
+      replication_factor: 1
+      ring:
+        kvstore:
+          store: inmemory
+
+    schema_config:
+      configs:
+        - from: 2020-10-24
+          store: tsdb
+          object_store: filesystem
+          schema: v13
+          index:
+            prefix: index_
+            period: 24h
+
+    # retention_period는 compactor가 retention_enabled일 때만 실제로 삭제한다.
+    # (이게 없으면 15일이 지나도 안 지워져서 PVC가 결국 가득 참)
+    compactor:
+      working_directory: /loki/compactor
+      retention_enabled: true
+      delete_request_store: filesystem
+
+    limits_config:
+      retention_period: 360h  # 15일 보관. 디스크 용량에 맞춰 조정할 것
+      # 설치 전 확인: 클러스터 여러 개가 동시에 push하면
+      # 단일클러스터 대비 수신량이 올라간다. 기본 ingestion rate limit(4MB/s)
+      # 근처면 아래처럼 올려둘 것 (429로 전체 전송이 막힌 전례 있음)
+      # ingestion_rate_mb: 8
+      # ingestion_burst_size_mb: 16
+      otlp_config:
+        resource_attributes:
+          attributes_config:
+            - action: index_label
+              attributes:
+                - namespace
+                - app
+                - pod
+                - container
+                - cluster
+kind: ConfigMap
+metadata:
+  labels:
+    app.kubernetes.io/name: loki
+  name: loki
+  namespace: monitoring

@@ -1,0 +1,25 @@
+# Traefik Middleware — route.yaml의 HTTPRoute가 filter로 참조해서 push 엔드포인트 앞단에 Basic Auth를 건다.
+#
+# "users"는 htpasswd 포맷(한 줄에 클러스터 하나). 각 줄은 <CLUSTER_NAME>:<그 클러스터 LOKI_PUSH_TOKEN의 해시>이고
+# 루트의 configure.sh가 secrets.env에서 채운다 (bcrypt 또는 apr1). 평문 토큰·따옴표·공백이 들어가면 Traefik이
+# 이 Middleware를 만들지 못해 Route가 사라진다(otel에는 404). 사용자명은 각 클러스터 otel의 CLUSTER_NAME과 같아야 한다.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: loki-push-basicauth
+  namespace: monitoring
+type: Opaque
+stringData:
+  users: |
+    REPLACE_ME_HTPASSWD_DEV
+    REPLACE_ME_HTPASSWD_STG
+    REPLACE_ME_HTPASSWD_PROD
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: loki-push-basicauth
+  namespace: monitoring
+spec:
+  basicAuth:
+    secret: loki-push-basicauth

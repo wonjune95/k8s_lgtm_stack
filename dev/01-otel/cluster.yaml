@@ -1,0 +1,299 @@
+# otel-cluster: 클러스터당 1개(Deployment replicas 1)만 떠야 하는 수집기.
+# DaemonSet에 넣으면 노드 수만큼 같은 값을 중복으로 보낸다.
+#  - k8s_cluster : 파드 phase·컨테이너 재시작/ready/대기 사유·Deployment 가용 수·노드 condition·
+#                  컨테이너 request/limit → mgmt Mimir
+#  - k8s_objects : 쿠버네티스 이벤트(BackOff, FailedScheduling, OOMKilling, Unhealthy ...) → mgmt Loki
+#                  {cluster="dev", app="k8s-events"} — 시작 이후 이벤트만(재시작 동안 생긴 이벤트는 유실)
+# 이미지·Secret·CA는 DaemonSet(daemonset.yaml)과 같은 것을 쓴다.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: otel-cluster
+  namespace: monitoring
+---
+# 읽기 전용(get/list/watch). Secret·ConfigMap은 읽지 않는다.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: otel-cluster
+rules:
+- apiGroups: ['']
+  resources: [events, namespaces, namespaces/status, nodes, nodes/spec, pods, pods/status,
+              replicationcontrollers, replicationcontrollers/status, resourcequotas, services]
+  verbs: [get, list, watch]
+- apiGroups: [apps]
+  resources: [daemonsets, deployments, replicasets, statefulsets]
+  verbs: [get, list, watch]
+- apiGroups: [batch]
+  resources: [jobs, cronjobs]
+  verbs: [get, list, watch]
+- apiGroups: [autoscaling]
+  resources: [horizontalpodautoscalers]
+  verbs: [get, list, watch]
+- apiGroups: [events.k8s.io]
+  resources: [events]
+  verbs: [get, list, watch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: otel-cluster
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: otel-cluster
+subjects:
+- kind: ServiceAccount
+  name: otel-cluster
+  namespace: monitoring
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: otel-cluster
+  namespace: monitoring
+data:
+  config.yaml: |
+    receivers:
+      k8s_cluster:
+        auth_type: serviceAccount
+        collection_interval: 60s
+        node_conditions_to_report: [Ready, MemoryPressure, DiskPressure, PIDPressure]
+        allocatable_types_to_report: [cpu, memory]
+        metrics:
+          # 컨테이너가 Running이 아닐 때의 사유(CrashLoopBackOff, ImagePullBackOff, OOMKilled ...)
+          k8s.container.status.reason:
+            enabled: true
+          # 옛 ReplicaSet(Deployment마다 revisionHistoryLimit개)까지 시계열이 생겨서 끈다
+          k8s.replicaset.desired:
+            enabled: false
+          k8s.replicaset.available:
+            enabled: false
+
+      k8s_objects:
+        auth_type: serviceAccount
+        objects:
+          - name: events
+            group: ""
+            mode: watch
+
+    processors:
+      memory_limiter:
+        check_interval: 1s
+        limit_percentage: 80
+        spike_limit_percentage: 25
+
+      batch: {}
+
+      # 01-otel/cm.yaml의 같은 이름 블록과 동일하게 유지할 것
+      transform/infra_labels:
+        error_mode: ignore
+        metric_statements:
+          - context: resource
+            statements:
+              - set(attributes["namespace"], attributes["k8s.namespace.name"]) where attributes["k8s.namespace.name"] != nil
+              - set(attributes["pod"], attributes["k8s.pod.name"]) where attributes["k8s.pod.name"] != nil
+              - set(attributes["container"], attributes["k8s.container.name"]) where attributes["k8s.container.name"] != nil
+              - set(attributes["node"], attributes["k8s.node.name"]) where attributes["k8s.node.name"] != nil
+              - delete_matching_keys(attributes, "^k8s\\.(namespace|pod|container|node)\\.name")
+              - delete_matching_keys(attributes, "\\.uid|^container\\.id")
+
+      # 이벤트 객체(JSON)를 한 줄로: "Warning BackOff Pod/web-123: Back-off restarting failed container"
+      # reason·kind·object는 Loki structured metadata로 남아 `| reason="BackOff"` 로 거를 수 있다.
+      transform/events:
+        error_mode: ignore
+        log_statements:
+          - context: log
+            statements:
+              - set(attributes["namespace"], body["object"]["involvedObject"]["namespace"])
+              - set(attributes["namespace"], "cluster-scope") where attributes["namespace"] == nil or attributes["namespace"] == ""
+              - set(attributes["reason"], body["object"]["reason"])
+              - set(attributes["kind"], body["object"]["involvedObject"]["kind"])
+              - set(attributes["object"], body["object"]["involvedObject"]["name"])
+              - set(severity_text, body["object"]["type"])
+              - set(severity_number, SEVERITY_NUMBER_WARN) where body["object"]["type"] == "Warning"
+              - set(severity_number, SEVERITY_NUMBER_INFO) where body["object"]["type"] != "Warning"
+              - 'set(body, Concat([body["object"]["type"], " ", body["object"]["reason"], " ", attributes["kind"], "/", attributes["object"], ": ", body["object"]["message"]], ""))'
+
+      # namespace를 리소스 속성으로 올려서 Loki 인덱스 라벨이 되게 한다
+      groupbyattrs/events:
+        keys: [namespace]
+
+      transform/event_labels:
+        log_statements:
+          - context: resource
+            statements:
+              - set(attributes["cluster"], "${env:CLUSTER_NAME}")
+              - set(attributes["app"], "k8s-events")
+
+    exporters:
+      otlp_http/loki:
+        endpoint: https://REPLACE_ME_LOKI_DOMAIN/otlp
+        auth:
+          authenticator: basicauth/loki
+        tls:
+          ca_file: /etc/mgmt-ca/ca.crt
+        # mgmt가 끊겨도 버리지 않고 파드 디스크(/var/lib/otelcol, emptyDir)에 쌓았다가 다시 보낸다(무기한 재시도).
+        # 큐가 차면 새 데이터부터 버린다(대시보드 "전송 실패"에 잡힘). 크기 근거는 README.md 운영 절.
+        sending_queue:
+          enabled: true
+          storage: file_storage
+          sizer: items
+          queue_size: 100000
+        retry_on_failure:
+          enabled: true
+          max_elapsed_time: 0
+
+      # 01-otel/cm.yaml의 prometheusremotewrite/infra와 같은 설정
+      prometheusremotewrite/infra:
+        endpoint: https://REPLACE_ME_MIMIR_DOMAIN/api/v1/push
+        auth:
+          authenticator: basicauth/mimir
+        tls:
+          ca_file: /etc/mgmt-ca/ca.crt
+        external_labels:
+          cluster: "${env:CLUSTER_NAME}"
+        resource_to_telemetry_conversion:
+          enabled: true
+        target_info:
+          enabled: false
+        # mgmt가 끊겨도 메모리에 들고 재시도한다(이 exporter는 디스크 큐 미지원, WAL은 실험 기능이라 안 씀).
+        # 이 exporter의 재시도는 요청 timeout 안에서만 돈다 — 기본 5s면 5초 뒤 "Permanent error"로 버린다(dev 실측).
+        # Mimir가 1시간보다 오래된 샘플을 거부하므로 50분까지 버틴다. 메모리가 차면 memory_limiter가 새 수집을 거부.
+        timeout: 50m
+        retry_on_failure:
+          enabled: true
+          max_elapsed_time: 0
+
+    extensions:
+      # 전송 큐(로그·트레이스)와 (이 파드는 file_log 없음)를 파드 디스크에 둔다 — 아래 Deployment의 emptyDir.
+      # 컨테이너 재시작·mgmt 장애는 견디고, 파드가 새로 만들어지면(롤아웃·노드 재부팅) 비어서 시작한다.
+      file_storage:
+        directory: /var/lib/otelcol
+        timeout: 10s
+        compaction:
+          on_rebound: true
+          directory: /var/lib/otelcol
+      health_check:
+        endpoint: 0.0.0.0:13133
+      basicauth/loki:
+        client_auth:
+          username: "${env:CLUSTER_NAME}"
+          password: "${env:LOKI_PUSH_TOKEN}"
+      basicauth/mimir:
+        client_auth:
+          username: "${env:CLUSTER_NAME}"
+          password: "${env:MIMIR_PUSH_TOKEN}"
+
+    service:
+      telemetry:
+        metrics:
+          readers:
+            - pull:
+                exporter:
+                  prometheus:
+                    host: 0.0.0.0   # localhost만 쓰면 Prometheus 스크레이프가, 파드 IP만 쓰면 kubectl port-forward가 안 됨
+                    port: 8888
+      extensions: [health_check, file_storage, basicauth/loki, basicauth/mimir]
+      pipelines:
+        metrics:
+          receivers: [k8s_cluster]
+          processors: [memory_limiter, transform/infra_labels, batch]
+          exporters: [prometheusremotewrite/infra]
+        logs:
+          receivers: [k8s_objects]
+          processors: [memory_limiter, transform/events, groupbyattrs/events, transform/event_labels, batch]
+          exporters: [otlp_http/loki]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app.kubernetes.io/name: otel-cluster
+  name: otel-cluster
+  namespace: monitoring
+spec:
+  replicas: 1   # 반드시 1 — 2 이상이면 같은 메트릭·이벤트가 중복으로 들어감
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: otel-cluster
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: otel-cluster
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8888"
+    spec:
+      serviceAccountName: otel-cluster
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+      containers:
+      - name: otel-cluster
+        image: docker.io/otel/opentelemetry-collector-contrib:0.151.0@sha256:d57bfe8eee2378f31cb1193239fbcac521d54a5a071fca2bfc106916a32b892d
+        imagePullPolicy: IfNotPresent
+        args:
+        - --config=/conf/config.yaml
+        env:
+        - name: CLUSTER_NAME
+          value: "dev"   # daemonset.yaml과 같은 값
+        - name: LOKI_PUSH_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: mgmt-push-auth
+              key: LOKI_PUSH_TOKEN
+        - name: MIMIR_PUSH_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: mgmt-push-auth
+              key: MIMIR_PUSH_TOKEN
+        ports:
+        - containerPort: 13133
+          name: health
+        - containerPort: 8888
+          name: metrics
+        livenessProbe:
+          httpGet:
+            path: /
+            port: health
+          periodSeconds: 10
+          failureThreshold: 6
+        readinessProbe:
+          httpGet:
+            path: /
+            port: health
+          periodSeconds: 10
+        resources:
+          requests:
+            cpu: 10m
+            memory: 128Mi
+          limits:
+            cpu: 200m
+            memory: 256Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop: [ALL]
+        volumeMounts:
+        - mountPath: /conf
+          name: config
+        - mountPath: /etc/mgmt-ca
+          name: mgmt-ca
+          readOnly: true
+        - mountPath: /var/lib/otelcol
+          name: buffer
+      volumes:
+      - configMap:
+          name: otel-cluster
+        name: config
+      - name: buffer        # 전송 큐(이벤트) — 파드와 수명이 같다
+        emptyDir:
+          sizeLimit: 1Gi
+      - configMap:
+          name: mgmt-ca
+        name: mgmt-ca

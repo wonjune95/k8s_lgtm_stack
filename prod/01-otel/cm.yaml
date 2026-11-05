@@ -1,0 +1,292 @@
+# otel-collector(DaemonSet) 설정 — dev/stg/prod 공통. 클러스터별로 다른 값은 없고,
+# cluster 라벨은 daemonset.yaml의 CLUSTER_NAME env로 주입.
+#
+# 하는 일 3가지:
+#  - logs   : 노드의 /var/log/pods tail → mgmt Loki(/otlp)
+#  - metrics: prometheus.io/scrape 어노테이션 pod(istio-proxy envoy 통계, otel 자기 메트릭 포함) 스크레이핑
+#             + 이 노드 kubelet의 노드·파드·컨테이너 사용량(kubeletstats) → mgmt Mimir
+#             (파드 상태·재시작·이벤트는 클러스터당 1개인 cluster.yaml의 otel-cluster가 수집)
+#  - traces : Envoy(zipkin :9411)와 OTel SDK(OTLP)의 스팬을 받아 → mgmt 중앙 Tempo(트레이스 검색·조회용, Jaeger처럼)로 보냄.
+#             서비스 그래프는 Istio 메트릭으로 그리므로 스팬에서 메트릭을 만들지 않는다.
+#
+# mgmt push는 사설 CA(00-namespace/mgmt-ca.yaml)로 인증서를 검증한다.
+# 컴포넌트 이름은 0.151.0 기준 정식 이름(file_log, k8s_attributes, otlp_http).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: otel-collector
+  namespace: monitoring
+data:
+  config.yaml: |
+    receivers:
+      otlp:
+        protocols:
+          grpc:
+            endpoint: 0.0.0.0:4317
+          http:
+            endpoint: 0.0.0.0:4318
+
+      # Istio(Envoy) 트레이스 수신 — 02-istio/operator.yaml의 zipkin provider가 여기를 가리킨다
+      zipkin:
+        endpoint: 0.0.0.0:9411
+
+      file_log:
+        include: [/var/log/pods/*/*/*.log]
+        # monitoring(otel 자신 포함)은 반드시 제외 — 피드백 루프로 볼륨 폭증 → Loki 429.
+        # kube-system·istio도 app 로그가 아니라 제외 (필요하면 해당 줄을 뺄 것).
+        exclude:
+          - /var/log/pods/monitoring_*/*/*.log
+          - /var/log/pods/kube-system_*/*/*.log
+          - /var/log/pods/istio-system_*/*/*.log
+          - /var/log/pods/*/istio-proxy/*.log
+          - /var/log/pods/*/istio-init/*.log
+        include_file_path: true
+        # 읽은 위치를 file_storage에 기억 → 컨테이너가 재시작해도 이어서 읽는다(유실 없음).
+        # 파드가 새로 만들어지면 기억이 없어서 그 시점부터 읽는다(start_at: end) — 그 사이 몇 초분은 유실.
+        storage: file_storage
+        start_at: end
+        operators:
+          - type: container
+
+      prometheus:
+        config:
+          scrape_configs:
+            - job_name: kubernetes-pods
+              kubernetes_sd_configs:
+                - role: pod
+                  # 이 노드의 pod만 watch/스크레이핑 (DaemonSet 중복 스크레이핑 방지 +
+                  # API 서버 부하를 노드 수로 나눔)
+                  selectors:
+                    - role: pod
+                      field: spec.nodeName=${env:NODE_NAME}
+              relabel_configs:
+                - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+                  action: keep
+                  regex: true
+                - source_labels: [__meta_kubernetes_pod_phase]
+                  action: drop
+                  regex: Pending|Succeeded|Failed
+                - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+                  action: replace
+                  target_label: __metrics_path__
+                  regex: (.+)
+                - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
+                  action: replace
+                  regex: ([^:]+)(?::\d+)?;(\d+)
+                  replacement: $$1:$$2
+                  target_label: __address__
+                - source_labels: [__meta_kubernetes_namespace]
+                  target_label: namespace
+                - source_labels: [__meta_kubernetes_pod_name]
+                  target_label: pod
+              # Istio 표준 메트릭은 라벨이 ~25개라 여기서 붙이는 라벨까지 더하면 Mimir 기본
+              # 한도(시리즈당 30개)를 넘어 push가 400으로 거부된다. 단일 클러스터 메시에서
+              # 사실상 상수이거나(cluster, canonical_revision) 워크로드+네임스페이스로 대신
+              # 알 수 있는(principal = SA의 SPIFFE ID) 라벨만 뺀다.
+              metric_relabel_configs:
+                - action: labeldrop
+                  regex: (source|destination)_(cluster|canonical_revision|principal)
+
+      # 이 노드 kubelet의 /stats/summary (RBAC nodes/stats). kubelet 서빙 인증서는 대부분
+      # 클러스터 CA가 아닌 자체서명이라 검증을 끈다 — 같은 노드 안의 통신이고 인증은 SA 토큰.
+      # nodes/proxy 권한은 주지 않는다(kubelet exec까지 열림) — 그래서 limit 대비 사용률은
+      # kubeletstats 옵션 대신 대시보드에서 otel-cluster의 k8s_container_*_limit로 나눠 계산.
+      kubeletstats:
+        collection_interval: 60s
+        auth_type: serviceAccount
+        endpoint: https://${env:NODE_IP}:10250
+        insecure_skip_verify: true
+        # volume 그룹은 뺐다: PVC 이름이 kubelet /pods(= nodes/proxy 권한)에서만 붙고,
+        # NAS(NFS) PVC는 PVC 크기가 아니라 공유 전체 용량·사용량을 보고해서 오해를 부른다.
+        metric_groups: [node, pod, container]
+
+    processors:
+      # 컨테이너 memory limit(daemonset.yaml) 대비 비율. 넘으면 수신을 거부해서
+      # OOMKill 대신 backpressure로 버틴다. 반드시 각 파이프라인의 첫 processor.
+      memory_limiter:
+        check_interval: 1s
+        limit_percentage: 80
+        spike_limit_percentage: 25
+
+      batch: {}
+
+      k8s_attributes:
+        auth_type: serviceAccount
+        # 이 노드의 pod만 watch (안 하면 DaemonSet pod마다 클러스터 전체 pod를 캐시)
+        filter:
+          node_from_env_var: NODE_NAME
+        extract:
+          metadata:
+            - k8s.namespace.name
+            - k8s.pod.name
+            - k8s.container.name
+          labels:
+            - tag_name: k8s.pod.labels.app
+              key: app
+              from: pod
+        pod_association:
+          - sources:
+              - from: resource_attribute
+                name: k8s.pod.name
+              - from: resource_attribute
+                name: k8s.namespace.name
+
+      # 중앙 Tempo에서 클러스터를 구분하는 속성 (TraceQL: { resource.cluster = "dev" })
+      transform/trace_cluster:
+        trace_statements:
+          - context: resource
+            statements:
+              - set(attributes["cluster"], "${env:CLUSTER_NAME}")
+
+      transform/loki_labels:
+        log_statements:
+          - context: resource
+            statements:
+              - set(attributes["namespace"], attributes["k8s.namespace.name"])
+              - set(attributes["app"], attributes["k8s.pod.labels.app"])
+              - set(attributes["pod"], attributes["k8s.pod.name"])
+              - set(attributes["container"], attributes["k8s.container.name"])
+              - set(attributes["cluster"], "${env:CLUSTER_NAME}")
+
+      # 인프라 메트릭 라벨을 기존 메트릭과 같은 이름(namespace/pod/container/node)으로 맞추고
+      # 파드가 바뀔 때마다 새 시계열을 만드는 uid 류는 버린다. cluster.yaml에 같은 블록이 있음.
+      transform/infra_labels:
+        error_mode: ignore
+        metric_statements:
+          - context: resource
+            statements:
+              - set(attributes["namespace"], attributes["k8s.namespace.name"]) where attributes["k8s.namespace.name"] != nil
+              - set(attributes["pod"], attributes["k8s.pod.name"]) where attributes["k8s.pod.name"] != nil
+              - set(attributes["container"], attributes["k8s.container.name"]) where attributes["k8s.container.name"] != nil
+              - set(attributes["node"], attributes["k8s.node.name"]) where attributes["k8s.node.name"] != nil
+              - delete_matching_keys(attributes, "^k8s\\.(namespace|pod|container|node)\\.name")
+              - delete_matching_keys(attributes, "\\.uid|^container\\.id")
+
+    exporters:
+      # mgmt 중앙 Tempo (OTLP/HTTP → https://REPLACE_ME_TEMPO_DOMAIN/v1/traces)
+      otlp_http/tempo_central:
+        endpoint: https://REPLACE_ME_TEMPO_DOMAIN
+        auth:
+          authenticator: basicauth/tempo
+        tls:
+          ca_file: /etc/mgmt-ca/ca.crt
+        # mgmt가 끊겨도 버리지 않고 파드 디스크(/var/lib/otelcol, emptyDir)에 쌓았다가 다시 보낸다(무기한 재시도).
+        # 큐가 차면 새 데이터부터 버린다(대시보드 "전송 실패"에 잡힘). 크기 근거는 README.md 운영 절.
+        sending_queue:
+          enabled: true
+          storage: file_storage
+          sizer: items
+          queue_size: 200000
+        retry_on_failure:
+          enabled: true
+          max_elapsed_time: 0
+
+      # contrib에서 loki exporter가 제거돼서 Loki 3.5 네이티브 OTLP 수신으로 보낸다.
+      otlp_http/loki:
+        endpoint: https://REPLACE_ME_LOKI_DOMAIN/otlp
+        auth:
+          authenticator: basicauth/loki
+        tls:
+          ca_file: /etc/mgmt-ca/ca.crt
+        # mgmt가 끊겨도 버리지 않고 파드 디스크(/var/lib/otelcol, emptyDir)에 쌓았다가 다시 보낸다(무기한 재시도).
+        # 큐가 차면 새 데이터부터 버린다(대시보드 "전송 실패"에 잡힘). 크기 근거는 README.md 운영 절.
+        sending_queue:
+          enabled: true
+          storage: file_storage
+          sizer: items
+          queue_size: 300000
+        retry_on_failure:
+          enabled: true
+          max_elapsed_time: 0
+
+      prometheusremotewrite:
+        endpoint: https://REPLACE_ME_MIMIR_DOMAIN/api/v1/push
+        auth:
+          authenticator: basicauth/mimir
+        tls:
+          ca_file: /etc/mgmt-ca/ca.crt
+        external_labels:
+          cluster: "${env:CLUSTER_NAME}"
+        # mgmt가 끊겨도 메모리에 들고 재시도한다(이 exporter는 디스크 큐 미지원, WAL은 실험 기능이라 안 씀).
+        # 이 exporter의 재시도는 요청 timeout 안에서만 돈다 — 기본 5s면 5초 뒤 "Permanent error"로 버린다(dev 실측).
+        # Mimir가 1시간보다 오래된 샘플을 거부하므로 50분까지 버틴다. 메모리가 차면 memory_limiter가 새 수집을 거부.
+        timeout: 50m
+        retry_on_failure:
+          enabled: true
+          max_elapsed_time: 0
+
+      # 인프라 메트릭 전용 — 리소스 속성(namespace/pod/...)을 라벨로 바꿔 보낸다. 위 exporter에
+      # 같은 옵션을 켜면 Istio 메트릭에 라벨이 더 붙어 시리즈당 30개 한도를 넘는다.
+      prometheusremotewrite/infra:
+        endpoint: https://REPLACE_ME_MIMIR_DOMAIN/api/v1/push
+        auth:
+          authenticator: basicauth/mimir
+        tls:
+          ca_file: /etc/mgmt-ca/ca.crt
+        external_labels:
+          cluster: "${env:CLUSTER_NAME}"
+        resource_to_telemetry_conversion:
+          enabled: true
+        target_info:
+          enabled: false
+        # mgmt가 끊겨도 메모리에 들고 재시도한다(이 exporter는 디스크 큐 미지원, WAL은 실험 기능이라 안 씀).
+        # 이 exporter의 재시도는 요청 timeout 안에서만 돈다 — 기본 5s면 5초 뒤 "Permanent error"로 버린다(dev 실측).
+        # Mimir가 1시간보다 오래된 샘플을 거부하므로 50분까지 버틴다. 메모리가 차면 memory_limiter가 새 수집을 거부.
+        timeout: 50m
+        retry_on_failure:
+          enabled: true
+          max_elapsed_time: 0
+
+    extensions:
+      # 전송 큐(로그·트레이스)와 file_log 읽기 위치를 파드 디스크에 둔다 — daemonset.yaml의 emptyDir.
+      # 컨테이너 재시작·mgmt 장애는 견디고, 파드가 새로 만들어지면(롤아웃·노드 재부팅) 비어서 시작한다.
+      file_storage:
+        directory: /var/lib/otelcol
+        timeout: 10s
+        compaction:
+          on_rebound: true
+          directory: /var/lib/otelcol
+      health_check:
+        endpoint: 0.0.0.0:13133
+      basicauth/loki:
+        client_auth:
+          username: "${env:CLUSTER_NAME}"
+          password: "${env:LOKI_PUSH_TOKEN}"
+      basicauth/mimir:
+        client_auth:
+          username: "${env:CLUSTER_NAME}"
+          password: "${env:MIMIR_PUSH_TOKEN}"
+      basicauth/tempo:
+        client_auth:
+          username: "${env:CLUSTER_NAME}"
+          password: "${env:TEMPO_PUSH_TOKEN}"
+
+    service:
+      # otel 자기 메트릭(전송 실패·큐 크기 등)을 :8888로 노출 — daemonset.yaml의
+      # prometheus.io 어노테이션으로 위 prometheus receiver가 스크레이핑한다.
+      telemetry:
+        metrics:
+          readers:
+            - pull:
+                exporter:
+                  prometheus:
+                    host: 0.0.0.0   # localhost만 쓰면 Prometheus 스크레이프가, 파드 IP만 쓰면 kubectl port-forward가 안 됨
+                    port: 8888
+      extensions: [health_check, file_storage, basicauth/loki, basicauth/mimir, basicauth/tempo]
+      pipelines:
+        traces:
+          receivers: [otlp, zipkin]
+          processors: [memory_limiter, transform/trace_cluster, batch]
+          exporters: [otlp_http/tempo_central]
+        metrics:
+          receivers: [prometheus]
+          processors: [memory_limiter, batch]
+          exporters: [prometheusremotewrite]
+        metrics/infra:
+          receivers: [kubeletstats]
+          processors: [memory_limiter, transform/infra_labels, batch]
+          exporters: [prometheusremotewrite/infra]
+        logs:
+          receivers: [file_log]
+          processors: [memory_limiter, k8s_attributes, transform/loki_labels, batch]
+          exporters: [otlp_http/loki]

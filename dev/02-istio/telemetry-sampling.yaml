@@ -1,0 +1,19 @@
+# 기본 샘플링 1%라 대부분의 트레이스가 누락됨 — 100%로 올림.
+# 트래픽이 아주 많은 운영 환경이라면 비율을 낮춰서 Tempo/네트워크 부하를
+# 조절할 것 (개발 클러스터는 100% 유지 권장, 운영은 실제 트래픽량 보고 조정 —
+# 트래픽이 많다면 100% 유지 시 Tempo/네트워크 부하가 커질 수 있음).
+apiVersion: telemetry.istio.io/v1
+kind: Telemetry
+metadata:
+  name: mesh-default-tracing
+  namespace: istio-system
+spec:
+  # Istio 표준 메트릭(istio_requests_total, istio_request_duration_milliseconds 등).
+  # operator.yaml이 meshConfig.defaultProviders에 tracing만 지정해서 기본 메트릭
+  # provider가 빠지므로 여기서 명시적으로 켠다. 대시보드의 요청/에러/지연(RED)
+  # 패널이 이 메트릭을 쓴다 — 트레이스 샘플링과 무관하게 모든 요청을 센다.
+  metrics:
+  - providers:
+    - name: prometheus
+  tracing:
+  - randomSamplingPercentage: 100

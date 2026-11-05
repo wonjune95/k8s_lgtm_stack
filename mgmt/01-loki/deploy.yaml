@@ -1,0 +1,67 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app.kubernetes.io/name: loki
+  name: loki
+  namespace: monitoring
+spec:
+  progressDeadlineSeconds: 600
+  replicas: 1
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: loki
+  # RWO PVC 하나를 쓰므로 롤링 중 옛/새 파드가 같은 볼륨을 동시에 쓰지 않게 Recreate
+  # (NAS면 sqlite/WAL 동시 쓰기, 블록 스토리지 다중 노드면 Multi-Attach로 롤아웃이 멈춘다)
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: loki
+    spec:
+      containers:
+      - args:
+        - -config.file=/etc/loki/local-config.yaml
+        # 이미지 경로: images/README.md 절차대로 내부 레지스트리에 적재 후 교체
+        # 이미지는 digest로 고정한다 — 태그만 쓰면 레지스트리 태그가 바뀌었을 때 다른 이미지가 배포된다
+        image: docker.io/grafana/loki:3.5.0@sha256:4c431d2e6b9b38718694b31c5d56be7c80dc69c513215fde1aeb5b02cd4e2665
+        imagePullPolicy: IfNotPresent
+        name: loki
+        ports:
+        - containerPort: 3100
+          name: http
+          protocol: TCP
+        # 없으면 install.sh의 rollout status가 Loki 준비(약 1분) 전에 끝나고 Service가 503을 받는다
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: http
+          initialDelaySeconds: 15
+          periodSeconds: 10
+        resources: {}
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+        volumeMounts:
+        - mountPath: /etc/loki
+          name: config
+        - mountPath: /loki
+          name: storage
+      dnsPolicy: ClusterFirst
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      securityContext:
+        fsGroup: 10001
+        runAsGroup: 10001
+        runAsNonRoot: true
+        runAsUser: 10001
+      terminationGracePeriodSeconds: 30
+      volumes:
+      - configMap:
+          defaultMode: 420
+          name: loki
+        name: config
+      - name: storage
+        persistentVolumeClaim:
+          claimName: loki-pvc

@@ -1,0 +1,2459 @@
+{
+  "title": "서비스 메시 개요",
+  "uid": "mesh-service-graph",
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 22,
+  "editable": true,
+  "refresh": "30s",
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
+  "templating": {
+    "list": [
+      {
+        "name": "cluster",
+        "label": "클러스터",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "mimir"
+        },
+        "definition": "label_values(k8s_node_condition_ready, cluster)",
+        "query": {
+          "qryType": 5,
+          "query": "label_values(k8s_node_condition_ready, cluster)",
+          "refId": "PrometheusVariableQueryEditor-VariableQuery"
+        },
+        "refresh": 2,
+        "sort": 1,
+        "includeAll": false,
+        "multi": false,
+        "current": {},
+        "hide": 0
+      },
+      {
+        "name": "namespace",
+        "label": "네임스페이스",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "mimir"
+        },
+        "definition": "query_result(count by (ns) (label_replace(last_over_time(istio_requests_total{cluster=\"$cluster\", destination_workload_namespace!=\"unknown\"}[$__range]), \"ns\", \"$1\", \"destination_workload_namespace\", \"(.+)\")) or count by (ns) (label_replace(last_over_time(istio_requests_total{cluster=\"$cluster\", source_workload_namespace!=\"unknown\"}[$__range]), \"ns\", \"$1\", \"source_workload_namespace\", \"(.+)\")))",
+        "query": {
+          "qryType": 5,
+          "query": "query_result(count by (ns) (label_replace(last_over_time(istio_requests_total{cluster=\"$cluster\", destination_workload_namespace!=\"unknown\"}[$__range]), \"ns\", \"$1\", \"destination_workload_namespace\", \"(.+)\")) or count by (ns) (label_replace(last_over_time(istio_requests_total{cluster=\"$cluster\", source_workload_namespace!=\"unknown\"}[$__range]), \"ns\", \"$1\", \"source_workload_namespace\", \"(.+)\")))",
+          "refId": "PrometheusVariableQueryEditor-VariableQuery"
+        },
+        "regex": "/ns=\"([^\"]+)\"/",
+        "refresh": 2,
+        "sort": 1,
+        "includeAll": true,
+        "allValue": ".*",
+        "multi": false,
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "hide": 0
+      },
+      {
+        "name": "app",
+        "type": "textbox",
+        "label": "앱 (부분 일치)",
+        "query": "",
+        "current": {
+          "value": "",
+          "text": ""
+        },
+        "hide": 0
+      },
+      {
+        "name": "search",
+        "type": "textbox",
+        "label": "로그 검색",
+        "query": "",
+        "current": {
+          "value": "",
+          "text": ""
+        },
+        "hide": 0
+      }
+    ]
+  },
+  "panels": [
+    {
+      "type": "row",
+      "id": 31,
+      "title": "클러스터 상태 — 0이 아니면 클릭해서 \"쿠버네티스 클러스터 상태\"에서 원인 확인",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "type": "stat",
+      "id": 32,
+      "title": "노드 이상",
+      "description": "NotReady(False/Unknown)이거나 메모리·디스크·PID 압박이 켜진 노드 수.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "mimir"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 0,
+        "y": 1
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "count(max by (node) ({cluster=\"$cluster\", __name__=~\"k8s_node_condition_(memory|disk|pid)_pressure\"} == 1) or max by (node) (k8s_node_condition_ready{cluster=\"$cluster\"} != 1)) or vector(0)",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "mimir"
+          },
+          "interval": "1m",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 0,
+          "noValue": "0",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "value": 1,
+                "color": "red"
+              }
+            ]
+          },
+          "links": [
+            {
+              "title": "쿠버네티스 클러스터 상태 열기",
+              "url": "/d/k8s-cluster?var-cluster=${cluster}&${__url_time_range}"
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "textMode": "value",
+        "orientation": "auto",
+        "wideLayout": true,
+        "showPercentChange": false
+      }
+    },
+    {
+      "type": "stat",
+      "id": 33,
+      "title": "비정상 파드",
+      "description": "Pending·Failed·Unknown 파드 수 (스케줄 실패, 이미지 못 받음, 볼륨 마운트 실패 등).",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "mimir"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 4,
+        "y": 1
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "count(k8s_pod_phase{cluster=\"$cluster\"} == 1 or k8s_pod_phase{cluster=\"$cluster\"} >= 4) or vector(0)",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "mimir"
+          },
+          "interval": "1m",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 0,
+          "noValue": "0",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "value": 1,
+                "color": "red"
+              }
+            ]
+          },
+          "links": [
+            {
+              "title": "쿠버네티스 클러스터 상태 열기",
+              "url": "/d/k8s-cluster?var-cluster=${cluster}&${__url_time_range}"
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "textMode": "value",
+        "orientation": "auto",
+        "wideLayout": true,
+        "showPercentChange": false
+      }
+    },
+    {
+      "type": "stat",
+      "id": 34,
+      "title": "문제 컨테이너",
+      "description": "CrashLoopBackOff·ImagePullBackOff·ErrImagePull·OOMKilled·Error·CreateContainerConfigError 상태 컨테이너 수.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "mimir"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 8,
+        "y": 1
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "count(k8s_container_status_reason{cluster=\"$cluster\", k8s_container_status_reason!~\"Completed|ContainerCreating\"} == 1) or vector(0)",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "mimir"
+          },
+          "interval": "1m",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 0,
+          "noValue": "0",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "value": 1,
+                "color": "red"
+              }
+            ]
+          },
+          "links": [
+            {
+              "title": "쿠버네티스 클러스터 상태 열기",
+              "url": "/d/k8s-cluster?var-cluster=${cluster}&${__url_time_range}"
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "textMode": "value",
+        "orientation": "auto",
+        "wideLayout": true,
+        "showPercentChange": false
+      }
+    },
+    {
+      "type": "stat",
+      "id": 35,
+      "title": "재시작 (구간)",
+      "description": "선택 구간 동안 컨테이너가 재시작한 총 횟수. 1회 이상 주황, 10회 이상 빨강. 새로 생긴 파드는 첫 수집(최대 1분) 전 재시작이 빠진다.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "mimir"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 12,
+        "y": 1
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(max_over_time(k8s_container_restarts{cluster=\"$cluster\"}[$__range]) - min_over_time(k8s_container_restarts{cluster=\"$cluster\"}[$__range])) or vector(0)",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "mimir"
+          },
+          "interval": "1m",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 0,
+          "noValue": "0",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "value": 1,
+                "color": "orange"
+              },
+              {
+                "value": 10,
+                "color": "red"
+              }
+            ]
+          },
+          "links": [
+            {
+              "title": "쿠버네티스 클러스터 상태 열기",
+              "url": "/d/k8s-cluster?var-cluster=${cluster}&${__url_time_range}"
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "textMode": "value",
+        "orientation": "auto",
+        "wideLayout": true,
+        "showPercentChange": false
+      }
+    },
+    {
+      "type": "stat",
+      "id": 36,
+      "title": "가용 부족 워크로드",
+      "description": "desired보다 ready/available이 적은 Deployment·StatefulSet·DaemonSet 수 (otel-collector 자신 포함).",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "mimir"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 16,
+        "y": 1
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "(count((k8s_deployment_desired{cluster=\"$cluster\"} - k8s_deployment_available{cluster=\"$cluster\"}) > 0) or vector(0)) + (count((k8s_statefulset_desired_pods{cluster=\"$cluster\"} - k8s_statefulset_ready_pods{cluster=\"$cluster\"}) > 0) or vector(0)) + (count((k8s_daemonset_desired_scheduled_nodes{cluster=\"$cluster\"} - k8s_daemonset_ready_nodes{cluster=\"$cluster\"}) > 0) or vector(0))",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "mimir"
+          },
+          "interval": "1m",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 0,
+          "noValue": "0",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "value": 1,
+                "color": "red"
+              }
+            ]
+          },
+          "links": [
+            {
+              "title": "쿠버네티스 클러스터 상태 열기",
+              "url": "/d/k8s-cluster?var-cluster=${cluster}&${__url_time_range}"
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "textMode": "value",
+        "orientation": "auto",
+        "wideLayout": true,
+        "showPercentChange": false
+      }
+    },
+    {
+      "type": "stat",
+      "id": 37,
+      "title": "마지막 수신",
+      "description": "클러스터 상태 메트릭이 마지막으로 들어온 뒤 지난 시간. 3분 넘으면 주황, 10분 넘으면 빨강 — otel-cluster 파드나 mgmt 전송 경로 장애. \"수신 없음\"(빨강)이면 최근 5분 안에 이 클러스터 데이터가 하나도 없다 — 이때 다른 칸의 0은 정상이라는 뜻이 아니다.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "mimir"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 20,
+        "y": 1
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "time() - max(timestamp(k8s_node_condition_ready{cluster=\"$cluster\"})) or vector(-1)",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "mimir"
+          },
+          "interval": "1m",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "decimals": 0,
+          "noValue": "수신 없음",
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "-1": {
+                  "text": "수신 없음",
+                  "color": "red",
+                  "index": 0
+                }
+              }
+            }
+          ],
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "value": 180,
+                "color": "orange"
+              },
+              {
+                "value": 600,
+                "color": "red"
+              }
+            ]
+          },
+          "links": [
+            {
+              "title": "쿠버네티스 클러스터 상태 열기",
+              "url": "/d/k8s-cluster?var-cluster=${cluster}&${__url_time_range}"
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "textMode": "value",
+        "orientation": "auto",
+        "wideLayout": true,
+        "showPercentChange": false
+      }
+    },
+    {
+      "type": "row",
+      "id": 11,
+      "title": "개요 — 선택한 시간 범위 기준",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 5
+      }
+    },
+    {
+      "type": "stat",
+      "id": 12,
+      "title": "요청/초",
+      "description": "Istio 사이드카가 센 전체 요청률(구간 평균). 트레이스 샘플링과 무관.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "mimir"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 0,
+        "y": 6
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(istio_requests_total{cluster=\"$cluster\", reporter=\"destination\", destination_workload_namespace=~\"$namespace\", destination_canonical_service=~\".*$app.*\"}[$__rate_interval])) or vector(0)",
+          "interval": "1m",
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "mimir"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "decimals": 2,
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "blue"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "mean"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "none",
+        "graphMode": "area",
+        "justifyMode": "center",
+        "textMode": "value",
+        "orientation": "auto",
+        "wideLayout": true,
+        "showPercentChange": false
+      }
+    },
+    {
+      "type": "stat",
+      "id": 13,
+      "title": "5xx 에러율",
+      "description": "5xx 응답 비율(구간 평균). 1% 주황, 5% 빨강.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "mimir"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 4,
+        "y": 6
+      },
+      "targets": [
+        {
+          "expr": "(sum(rate(istio_requests_total{cluster=\"$cluster\", reporter=\"destination\", destination_workload_namespace=~\"$namespace\", destination_canonical_service=~\".*$app.*\", response_code=~\"5..\"}[$__rate_interval])) or sum(rate(istio_requests_total{cluster=\"$cluster\", reporter=\"destination\", destination_workload_namespace=~\"$namespace\", destination_canonical_service=~\".*$app.*\"}[$__rate_interval])) * 0) / sum(rate(istio_requests_total{cluster=\"$cluster\", reporter=\"destination\", destination_workload_namespace=~\"$namespace\", destination_canonical_service=~\".*$app.*\"}[$__rate_interval])) * 100",
+          "interval": "1m",
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "mimir"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 2,
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "value": 1,
+                "color": "orange"
+              },
+              {
+                "value": 5,
+                "color": "red"
+              }
+            ]
+          },
+          "noValue": "–"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "mean"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "center",
+        "textMode": "value",
+        "orientation": "auto",
+        "wideLayout": true,
+        "showPercentChange": false
+      }
+    },
+    {
+      "type": "stat",
+      "id": 14,
+      "title": "P95 응답시간",
+      "description": "서버 사이드카 기준 95번째 백분위(구간 평균). 500ms 주황, 1s 빨강.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "mimir"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 8,
+        "y": 6
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(istio_request_duration_milliseconds_bucket{cluster=\"$cluster\", reporter=\"destination\", destination_workload_namespace=~\"$namespace\", destination_canonical_service=~\".*$app.*\"}[$__rate_interval])))",
+          "interval": "1m",
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "mimir"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "decimals": 0,
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "value": 500,
+                "color": "orange"
+              },
+              {
+                "value": 1000,
+                "color": "red"
+              }
+            ]
+          },
+          "noValue": "–"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "mean"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "center",
+        "textMode": "value",
+        "orientation": "auto",
+        "wideLayout": true,
+        "showPercentChange": false
+      }
+    },
+    {
+      "type": "stat",
+      "id": 15,
+      "title": "요청 받은 서비스",
+      "description": "구간 안에 요청을 1건 이상 받은 서비스 수.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "mimir"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 12,
+        "y": 6
+      },
+      "targets": [
+        {
+          "expr": "count(sum by (destination_canonical_service) (increase(istio_requests_total{cluster=\"$cluster\", reporter=\"destination\", destination_workload_namespace=~\"$namespace\", destination_canonical_service=~\".*$app.*\"}[$__range])) > 0) or vector(0)",
+          "instant": true,
+          "range": false,
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "mimir"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "blue"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "none",
+        "graphMode": "area",
+        "justifyMode": "center",
+        "textMode": "value",
+        "orientation": "auto",
+        "wideLayout": true,
+        "showPercentChange": false
+      }
+    },
+    {
+      "type": "stat",
+      "id": 16,
+      "title": "에러 로그",
+      "description": "구간 안의 error/exception/fatal 로그 줄 수 (앱 로그, 대소문자 무시).",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "interval": "1m",
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 16,
+        "y": 6
+      },
+      "targets": [
+        {
+          "expr": "sum(count_over_time({cluster=\"$cluster\", namespace=~\"$namespace\", app=~\"$app.*\", app!=\"k8s-events\"} |~ \"(?i)(error|exception|fatal)\" [$__auto])) or vector(0)",
+          "queryType": "range",
+          "legendFormat": "errors",
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 0,
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "value": 1,
+                "color": "orange"
+              },
+              {
+                "value": 100,
+                "color": "red"
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "sum"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "center",
+        "textMode": "value",
+        "orientation": "auto",
+        "wideLayout": true,
+        "showPercentChange": false
+      }
+    },
+    {
+      "type": "stat",
+      "id": 17,
+      "title": "스크레이프 대상 정상",
+      "description": "클러스터 전체 메트릭 수집 대상 중 up=1 비율. 100% 미만이면 수집 경로/대상 점검. 값이 없으면 otel-collector→Mimir 경로 장애.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "mimir"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 20,
+        "y": 6
+      },
+      "targets": [
+        {
+          "expr": "sum(up{cluster=\"$cluster\"}) / count(up{cluster=\"$cluster\"}) * 100",
+          "interval": "1m",
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "mimir"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 0,
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "value": 90,
+                "color": "orange"
+              },
+              {
+                "value": 100,
+                "color": "green"
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "center",
+        "textMode": "value",
+        "orientation": "auto",
+        "wideLayout": true,
+        "showPercentChange": false
+      }
+    },
+    {
+      "type": "row",
+      "id": 18,
+      "title": "서비스 그래프 — Istio 메트릭 기반 (노드: 요청/분 · 에러%, 노드 클릭 → 해당 앱 로그)",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 10
+      }
+    },
+    {
+      "id": 1,
+      "type": "nodeGraph",
+      "title": "서비스 그래프 ($cluster)",
+      "gridPos": {
+        "h": 14,
+        "w": 24,
+        "x": 0,
+        "y": 11
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "mimir"
+      },
+      "targets": [
+        {
+          "refId": "e_rate",
+          "format": "table",
+          "instant": true,
+          "datasource": {
+            "type": "prometheus",
+            "uid": "mimir"
+          },
+          "expr": "label_replace(label_replace(label_join((sum by (client, server)(label_join(label_join(rate(istio_requests_total{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\"}[$__range]), \"server\", \".\", \"destination_canonical_service\", \"destination_workload_namespace\") or label_join(rate(istio_requests_total{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\"}[$__range]), \"server\", \".\", \"destination_service_name\", \"destination_service_namespace\"), \"client\", \".\", \"source_canonical_service\", \"source_workload_namespace\"))) * 60 > 0, \"id\", \"->\", \"client\", \"server\"), \"source\", \"$1\", \"client\", \"(.*)\"), \"target\", \"$1\", \"server\", \"(.*)\")"
+        },
+        {
+          "refId": "e_errpct",
+          "format": "table",
+          "instant": true,
+          "datasource": {
+            "type": "prometheus",
+            "uid": "mimir"
+          },
+          "expr": "label_replace(label_replace(label_join((((sum by (client, server)(label_join(label_join(rate(istio_requests_total{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\", response_code=~\"5..\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\", response_code=~\"5..\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\", response_code=~\"5..\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\", response_code=~\"5..\"}[$__range]), \"server\", \".\", \"destination_canonical_service\", \"destination_workload_namespace\") or label_join(rate(istio_requests_total{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\", response_code=~\"5..\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\", response_code=~\"5..\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\", response_code=~\"5..\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\", response_code=~\"5..\"}[$__range]), \"server\", \".\", \"destination_service_name\", \"destination_service_namespace\"), \"client\", \".\", \"source_canonical_service\", \"source_workload_namespace\")) or sum by (client, server)(label_join(label_join(rate(istio_requests_total{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\"}[$__range]), \"server\", \".\", \"destination_canonical_service\", \"destination_workload_namespace\") or label_join(rate(istio_requests_total{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\"}[$__range]), \"server\", \".\", \"destination_service_name\", \"destination_service_namespace\"), \"client\", \".\", \"source_canonical_service\", \"source_workload_namespace\")) * 0) / sum by (client, server)(label_join(label_join(rate(istio_requests_total{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\"}[$__range]), \"server\", \".\", \"destination_canonical_service\", \"destination_workload_namespace\") or label_join(rate(istio_requests_total{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\"}[$__range]), \"server\", \".\", \"destination_service_name\", \"destination_service_namespace\"), \"client\", \".\", \"source_canonical_service\", \"source_workload_namespace\"))) >= 0) * 100, \"id\", \"->\", \"client\", \"server\"), \"source\", \"$1\", \"client\", \"(.*)\"), \"target\", \"$1\", \"server\", \"(.*)\")"
+        },
+        {
+          "refId": "e_arcfail",
+          "format": "table",
+          "instant": true,
+          "datasource": {
+            "type": "prometheus",
+            "uid": "mimir"
+          },
+          "expr": "label_replace(label_replace(label_join(((sum by (client, server)(label_join(label_join(rate(istio_requests_total{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\", response_code=~\"5..\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\", response_code=~\"5..\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\", response_code=~\"5..\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\", response_code=~\"5..\"}[$__range]), \"server\", \".\", \"destination_canonical_service\", \"destination_workload_namespace\") or label_join(rate(istio_requests_total{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\", response_code=~\"5..\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\", response_code=~\"5..\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\", response_code=~\"5..\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\", response_code=~\"5..\"}[$__range]), \"server\", \".\", \"destination_service_name\", \"destination_service_namespace\"), \"client\", \".\", \"source_canonical_service\", \"source_workload_namespace\")) or sum by (client, server)(label_join(label_join(rate(istio_requests_total{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\"}[$__range]), \"server\", \".\", \"destination_canonical_service\", \"destination_workload_namespace\") or label_join(rate(istio_requests_total{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\"}[$__range]), \"server\", \".\", \"destination_service_name\", \"destination_service_namespace\"), \"client\", \".\", \"source_canonical_service\", \"source_workload_namespace\")) * 0) / sum by (client, server)(label_join(label_join(rate(istio_requests_total{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\"}[$__range]), \"server\", \".\", \"destination_canonical_service\", \"destination_workload_namespace\") or label_join(rate(istio_requests_total{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\"}[$__range]), \"server\", \".\", \"destination_service_name\", \"destination_service_namespace\"), \"client\", \".\", \"source_canonical_service\", \"source_workload_namespace\"))) >= 0, \"id\", \"->\", \"client\", \"server\"), \"source\", \"$1\", \"client\", \"(.*)\"), \"target\", \"$1\", \"server\", \"(.*)\")"
+        },
+        {
+          "refId": "e_arcsucc",
+          "format": "table",
+          "instant": true,
+          "datasource": {
+            "type": "prometheus",
+            "uid": "mimir"
+          },
+          "expr": "label_replace(label_replace(label_join(1 - (((sum by (client, server)(label_join(label_join(rate(istio_requests_total{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\", response_code=~\"5..\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\", response_code=~\"5..\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\", response_code=~\"5..\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\", response_code=~\"5..\"}[$__range]), \"server\", \".\", \"destination_canonical_service\", \"destination_workload_namespace\") or label_join(rate(istio_requests_total{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\", response_code=~\"5..\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\", response_code=~\"5..\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\", response_code=~\"5..\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\", response_code=~\"5..\"}[$__range]), \"server\", \".\", \"destination_service_name\", \"destination_service_namespace\"), \"client\", \".\", \"source_canonical_service\", \"source_workload_namespace\")) or sum by (client, server)(label_join(label_join(rate(istio_requests_total{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\"}[$__range]), \"server\", \".\", \"destination_canonical_service\", \"destination_workload_namespace\") or label_join(rate(istio_requests_total{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\"}[$__range]), \"server\", \".\", \"destination_service_name\", \"destination_service_namespace\"), \"client\", \".\", \"source_canonical_service\", \"source_workload_namespace\")) * 0) / sum by (client, server)(label_join(label_join(rate(istio_requests_total{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\"}[$__range]), \"server\", \".\", \"destination_canonical_service\", \"destination_workload_namespace\") or label_join(rate(istio_requests_total{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\"}[$__range]), \"server\", \".\", \"destination_service_name\", \"destination_service_namespace\"), \"client\", \".\", \"source_canonical_service\", \"source_workload_namespace\"))) >= 0), \"id\", \"->\", \"client\", \"server\"), \"source\", \"$1\", \"client\", \"(.*)\"), \"target\", \"$1\", \"server\", \"(.*)\")"
+        },
+        {
+          "refId": "e_lat",
+          "format": "table",
+          "instant": true,
+          "datasource": {
+            "type": "prometheus",
+            "uid": "mimir"
+          },
+          "expr": "label_replace(label_replace(label_join((sum by (client, server)(label_join(label_join(rate(istio_request_duration_milliseconds_sum{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\"}[$__range]) or rate(istio_request_duration_milliseconds_sum{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\"}[$__range]) or rate(istio_request_duration_milliseconds_sum{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\"}[$__range]) or rate(istio_request_duration_milliseconds_sum{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\"}[$__range]), \"server\", \".\", \"destination_canonical_service\", \"destination_workload_namespace\") or label_join(rate(istio_request_duration_milliseconds_sum{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\"}[$__range]) or rate(istio_request_duration_milliseconds_sum{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\"}[$__range]) or rate(istio_request_duration_milliseconds_sum{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\"}[$__range]) or rate(istio_request_duration_milliseconds_sum{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\"}[$__range]), \"server\", \".\", \"destination_service_name\", \"destination_service_namespace\"), \"client\", \".\", \"source_canonical_service\", \"source_workload_namespace\")) / sum by (client, server)(label_join(label_join(rate(istio_request_duration_milliseconds_count{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\"}[$__range]) or rate(istio_request_duration_milliseconds_count{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\"}[$__range]) or rate(istio_request_duration_milliseconds_count{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\"}[$__range]) or rate(istio_request_duration_milliseconds_count{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\"}[$__range]), \"server\", \".\", \"destination_canonical_service\", \"destination_workload_namespace\") or label_join(rate(istio_request_duration_milliseconds_count{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\"}[$__range]) or rate(istio_request_duration_milliseconds_count{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\"}[$__range]) or rate(istio_request_duration_milliseconds_count{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\"}[$__range]) or rate(istio_request_duration_milliseconds_count{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\"}[$__range]), \"server\", \".\", \"destination_service_name\", \"destination_service_namespace\"), \"client\", \".\", \"source_canonical_service\", \"source_workload_namespace\"))) >= 0, \"id\", \"->\", \"client\", \"server\"), \"source\", \"$1\", \"client\", \"(.*)\"), \"target\", \"$1\", \"server\", \"(.*)\")"
+        },
+        {
+          "refId": "n_rate",
+          "format": "table",
+          "instant": true,
+          "datasource": {
+            "type": "prometheus",
+            "uid": "mimir"
+          },
+          "expr": "label_replace(label_replace(label_replace(((sum by (id)(label_replace(sum by (client, server)(label_join(label_join(rate(istio_requests_total{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\"}[$__range]), \"server\", \".\", \"destination_canonical_service\", \"destination_workload_namespace\") or label_join(rate(istio_requests_total{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\"}[$__range]), \"server\", \".\", \"destination_service_name\", \"destination_service_namespace\"), \"client\", \".\", \"source_canonical_service\", \"source_workload_namespace\")), \"id\", \"$1\", \"server\", \"(.*)\")) > 0) or (sum by (id)(label_replace(sum by (client, server)(label_join(label_join(rate(istio_requests_total{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\"}[$__range]), \"server\", \".\", \"destination_canonical_service\", \"destination_workload_namespace\") or label_join(rate(istio_requests_total{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\"}[$__range]), \"server\", \".\", \"destination_service_name\", \"destination_service_namespace\"), \"client\", \".\", \"source_canonical_service\", \"source_workload_namespace\")), \"id\", \"$1\", \"client\", \"(.*)\")) > 0)) * 60, \"title\", \"$1\", \"id\", \"(.*)\"), \"app\", \"$1\", \"id\", \"(.*)\\\\.[^.]+$\"), \"namespace\", \"$1\", \"id\", \".*\\\\.([^.]+)$\")"
+        },
+        {
+          "refId": "n_errpct",
+          "format": "table",
+          "instant": true,
+          "datasource": {
+            "type": "prometheus",
+            "uid": "mimir"
+          },
+          "expr": "label_replace(label_replace(label_replace(((((sum by (id)(label_replace(sum by (client, server)(label_join(label_join(rate(istio_requests_total{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\", response_code=~\"5..\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\", response_code=~\"5..\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\", response_code=~\"5..\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\", response_code=~\"5..\"}[$__range]), \"server\", \".\", \"destination_canonical_service\", \"destination_workload_namespace\") or label_join(rate(istio_requests_total{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\", response_code=~\"5..\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\", response_code=~\"5..\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\", response_code=~\"5..\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\", response_code=~\"5..\"}[$__range]), \"server\", \".\", \"destination_service_name\", \"destination_service_namespace\"), \"client\", \".\", \"source_canonical_service\", \"source_workload_namespace\")), \"id\", \"$1\", \"server\", \"(.*)\")) or sum by (id)(label_replace(sum by (client, server)(label_join(label_join(rate(istio_requests_total{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\"}[$__range]), \"server\", \".\", \"destination_canonical_service\", \"destination_workload_namespace\") or label_join(rate(istio_requests_total{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\"}[$__range]), \"server\", \".\", \"destination_service_name\", \"destination_service_namespace\"), \"client\", \".\", \"source_canonical_service\", \"source_workload_namespace\")), \"id\", \"$1\", \"server\", \"(.*)\")) * 0) / sum by (id)(label_replace(sum by (client, server)(label_join(label_join(rate(istio_requests_total{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\"}[$__range]), \"server\", \".\", \"destination_canonical_service\", \"destination_workload_namespace\") or label_join(rate(istio_requests_total{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\"}[$__range]), \"server\", \".\", \"destination_service_name\", \"destination_service_namespace\"), \"client\", \".\", \"source_canonical_service\", \"source_workload_namespace\")), \"id\", \"$1\", \"server\", \"(.*)\"))) >= 0) or (((sum by (id)(label_replace(sum by (client, server)(label_join(label_join(rate(istio_requests_total{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\", response_code=~\"5..\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\", response_code=~\"5..\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\", response_code=~\"5..\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\", response_code=~\"5..\"}[$__range]), \"server\", \".\", \"destination_canonical_service\", \"destination_workload_namespace\") or label_join(rate(istio_requests_total{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\", response_code=~\"5..\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\", response_code=~\"5..\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\", response_code=~\"5..\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\", response_code=~\"5..\"}[$__range]), \"server\", \".\", \"destination_service_name\", \"destination_service_namespace\"), \"client\", \".\", \"source_canonical_service\", \"source_workload_namespace\")), \"id\", \"$1\", \"client\", \"(.*)\")) or sum by (id)(label_replace(sum by (client, server)(label_join(label_join(rate(istio_requests_total{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\"}[$__range]), \"server\", \".\", \"destination_canonical_service\", \"destination_workload_namespace\") or label_join(rate(istio_requests_total{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\"}[$__range]), \"server\", \".\", \"destination_service_name\", \"destination_service_namespace\"), \"client\", \".\", \"source_canonical_service\", \"source_workload_namespace\")), \"id\", \"$1\", \"client\", \"(.*)\")) * 0) / sum by (id)(label_replace(sum by (client, server)(label_join(label_join(rate(istio_requests_total{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\"}[$__range]), \"server\", \".\", \"destination_canonical_service\", \"destination_workload_namespace\") or label_join(rate(istio_requests_total{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\"}[$__range]), \"server\", \".\", \"destination_service_name\", \"destination_service_namespace\"), \"client\", \".\", \"source_canonical_service\", \"source_workload_namespace\")), \"id\", \"$1\", \"client\", \"(.*)\"))) >= 0)) * 100, \"title\", \"$1\", \"id\", \"(.*)\"), \"app\", \"$1\", \"id\", \"(.*)\\\\.[^.]+$\"), \"namespace\", \"$1\", \"id\", \".*\\\\.([^.]+)$\")"
+        },
+        {
+          "refId": "n_arcfail",
+          "format": "table",
+          "instant": true,
+          "datasource": {
+            "type": "prometheus",
+            "uid": "mimir"
+          },
+          "expr": "label_replace(label_replace(label_replace(((((sum by (id)(label_replace(sum by (client, server)(label_join(label_join(rate(istio_requests_total{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\", response_code=~\"5..\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\", response_code=~\"5..\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\", response_code=~\"5..\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\", response_code=~\"5..\"}[$__range]), \"server\", \".\", \"destination_canonical_service\", \"destination_workload_namespace\") or label_join(rate(istio_requests_total{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\", response_code=~\"5..\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\", response_code=~\"5..\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\", response_code=~\"5..\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\", response_code=~\"5..\"}[$__range]), \"server\", \".\", \"destination_service_name\", \"destination_service_namespace\"), \"client\", \".\", \"source_canonical_service\", \"source_workload_namespace\")), \"id\", \"$1\", \"server\", \"(.*)\")) or sum by (id)(label_replace(sum by (client, server)(label_join(label_join(rate(istio_requests_total{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\"}[$__range]), \"server\", \".\", \"destination_canonical_service\", \"destination_workload_namespace\") or label_join(rate(istio_requests_total{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\"}[$__range]), \"server\", \".\", \"destination_service_name\", \"destination_service_namespace\"), \"client\", \".\", \"source_canonical_service\", \"source_workload_namespace\")), \"id\", \"$1\", \"server\", \"(.*)\")) * 0) / sum by (id)(label_replace(sum by (client, server)(label_join(label_join(rate(istio_requests_total{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\"}[$__range]), \"server\", \".\", \"destination_canonical_service\", \"destination_workload_namespace\") or label_join(rate(istio_requests_total{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\"}[$__range]), \"server\", \".\", \"destination_service_name\", \"destination_service_namespace\"), \"client\", \".\", \"source_canonical_service\", \"source_workload_namespace\")), \"id\", \"$1\", \"server\", \"(.*)\"))) >= 0) or (((sum by (id)(label_replace(sum by (client, server)(label_join(label_join(rate(istio_requests_total{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\", response_code=~\"5..\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\", response_code=~\"5..\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\", response_code=~\"5..\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\", response_code=~\"5..\"}[$__range]), \"server\", \".\", \"destination_canonical_service\", \"destination_workload_namespace\") or label_join(rate(istio_requests_total{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\", response_code=~\"5..\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\", response_code=~\"5..\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\", response_code=~\"5..\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\", response_code=~\"5..\"}[$__range]), \"server\", \".\", \"destination_service_name\", \"destination_service_namespace\"), \"client\", \".\", \"source_canonical_service\", \"source_workload_namespace\")), \"id\", \"$1\", \"client\", \"(.*)\")) or sum by (id)(label_replace(sum by (client, server)(label_join(label_join(rate(istio_requests_total{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\"}[$__range]), \"server\", \".\", \"destination_canonical_service\", \"destination_workload_namespace\") or label_join(rate(istio_requests_total{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\"}[$__range]), \"server\", \".\", \"destination_service_name\", \"destination_service_namespace\"), \"client\", \".\", \"source_canonical_service\", \"source_workload_namespace\")), \"id\", \"$1\", \"client\", \"(.*)\")) * 0) / sum by (id)(label_replace(sum by (client, server)(label_join(label_join(rate(istio_requests_total{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\"}[$__range]), \"server\", \".\", \"destination_canonical_service\", \"destination_workload_namespace\") or label_join(rate(istio_requests_total{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\"}[$__range]), \"server\", \".\", \"destination_service_name\", \"destination_service_namespace\"), \"client\", \".\", \"source_canonical_service\", \"source_workload_namespace\")), \"id\", \"$1\", \"client\", \"(.*)\"))) >= 0)), \"title\", \"$1\", \"id\", \"(.*)\"), \"app\", \"$1\", \"id\", \"(.*)\\\\.[^.]+$\"), \"namespace\", \"$1\", \"id\", \".*\\\\.([^.]+)$\")"
+        },
+        {
+          "refId": "n_arcsucc",
+          "format": "table",
+          "instant": true,
+          "datasource": {
+            "type": "prometheus",
+            "uid": "mimir"
+          },
+          "expr": "label_replace(label_replace(label_replace(1 - ((((sum by (id)(label_replace(sum by (client, server)(label_join(label_join(rate(istio_requests_total{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\", response_code=~\"5..\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\", response_code=~\"5..\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\", response_code=~\"5..\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\", response_code=~\"5..\"}[$__range]), \"server\", \".\", \"destination_canonical_service\", \"destination_workload_namespace\") or label_join(rate(istio_requests_total{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\", response_code=~\"5..\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\", response_code=~\"5..\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\", response_code=~\"5..\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\", response_code=~\"5..\"}[$__range]), \"server\", \".\", \"destination_service_name\", \"destination_service_namespace\"), \"client\", \".\", \"source_canonical_service\", \"source_workload_namespace\")), \"id\", \"$1\", \"server\", \"(.*)\")) or sum by (id)(label_replace(sum by (client, server)(label_join(label_join(rate(istio_requests_total{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\"}[$__range]), \"server\", \".\", \"destination_canonical_service\", \"destination_workload_namespace\") or label_join(rate(istio_requests_total{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\"}[$__range]), \"server\", \".\", \"destination_service_name\", \"destination_service_namespace\"), \"client\", \".\", \"source_canonical_service\", \"source_workload_namespace\")), \"id\", \"$1\", \"server\", \"(.*)\")) * 0) / sum by (id)(label_replace(sum by (client, server)(label_join(label_join(rate(istio_requests_total{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\"}[$__range]), \"server\", \".\", \"destination_canonical_service\", \"destination_workload_namespace\") or label_join(rate(istio_requests_total{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\"}[$__range]), \"server\", \".\", \"destination_service_name\", \"destination_service_namespace\"), \"client\", \".\", \"source_canonical_service\", \"source_workload_namespace\")), \"id\", \"$1\", \"server\", \"(.*)\"))) >= 0) or (((sum by (id)(label_replace(sum by (client, server)(label_join(label_join(rate(istio_requests_total{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\", response_code=~\"5..\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\", response_code=~\"5..\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\", response_code=~\"5..\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\", response_code=~\"5..\"}[$__range]), \"server\", \".\", \"destination_canonical_service\", \"destination_workload_namespace\") or label_join(rate(istio_requests_total{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\", response_code=~\"5..\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\", response_code=~\"5..\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\", response_code=~\"5..\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\", response_code=~\"5..\"}[$__range]), \"server\", \".\", \"destination_service_name\", \"destination_service_namespace\"), \"client\", \".\", \"source_canonical_service\", \"source_workload_namespace\")), \"id\", \"$1\", \"client\", \"(.*)\")) or sum by (id)(label_replace(sum by (client, server)(label_join(label_join(rate(istio_requests_total{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\"}[$__range]), \"server\", \".\", \"destination_canonical_service\", \"destination_workload_namespace\") or label_join(rate(istio_requests_total{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\"}[$__range]), \"server\", \".\", \"destination_service_name\", \"destination_service_namespace\"), \"client\", \".\", \"source_canonical_service\", \"source_workload_namespace\")), \"id\", \"$1\", \"client\", \"(.*)\")) * 0) / sum by (id)(label_replace(sum by (client, server)(label_join(label_join(rate(istio_requests_total{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\"}[$__range]), \"server\", \".\", \"destination_canonical_service\", \"destination_workload_namespace\") or label_join(rate(istio_requests_total{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\"}[$__range]) or rate(istio_requests_total{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\"}[$__range]), \"server\", \".\", \"destination_service_name\", \"destination_service_namespace\"), \"client\", \".\", \"source_canonical_service\", \"source_workload_namespace\")), \"id\", \"$1\", \"client\", \"(.*)\"))) >= 0)), \"title\", \"$1\", \"id\", \"(.*)\"), \"app\", \"$1\", \"id\", \"(.*)\\\\.[^.]+$\"), \"namespace\", \"$1\", \"id\", \".*\\\\.([^.]+)$\")"
+        },
+        {
+          "refId": "n_lat",
+          "format": "table",
+          "instant": true,
+          "datasource": {
+            "type": "prometheus",
+            "uid": "mimir"
+          },
+          "expr": "label_replace(label_replace(label_replace(((sum by (id)(label_replace(sum by (client, server)(label_join(label_join(rate(istio_request_duration_milliseconds_sum{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\"}[$__range]) or rate(istio_request_duration_milliseconds_sum{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\"}[$__range]) or rate(istio_request_duration_milliseconds_sum{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\"}[$__range]) or rate(istio_request_duration_milliseconds_sum{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\"}[$__range]), \"server\", \".\", \"destination_canonical_service\", \"destination_workload_namespace\") or label_join(rate(istio_request_duration_milliseconds_sum{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\"}[$__range]) or rate(istio_request_duration_milliseconds_sum{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\"}[$__range]) or rate(istio_request_duration_milliseconds_sum{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\"}[$__range]) or rate(istio_request_duration_milliseconds_sum{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\"}[$__range]), \"server\", \".\", \"destination_service_name\", \"destination_service_namespace\"), \"client\", \".\", \"source_canonical_service\", \"source_workload_namespace\")), \"id\", \"$1\", \"server\", \"(.*)\")) / sum by (id)(label_replace(sum by (client, server)(label_join(label_join(rate(istio_request_duration_milliseconds_count{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\"}[$__range]) or rate(istio_request_duration_milliseconds_count{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\"}[$__range]) or rate(istio_request_duration_milliseconds_count{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\"}[$__range]) or rate(istio_request_duration_milliseconds_count{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\"}[$__range]), \"server\", \".\", \"destination_canonical_service\", \"destination_workload_namespace\") or label_join(rate(istio_request_duration_milliseconds_count{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\"}[$__range]) or rate(istio_request_duration_milliseconds_count{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\"}[$__range]) or rate(istio_request_duration_milliseconds_count{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\"}[$__range]) or rate(istio_request_duration_milliseconds_count{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\"}[$__range]), \"server\", \".\", \"destination_service_name\", \"destination_service_namespace\"), \"client\", \".\", \"source_canonical_service\", \"source_workload_namespace\")), \"id\", \"$1\", \"server\", \"(.*)\"))) >= 0) or ((sum by (id)(label_replace(sum by (client, server)(label_join(label_join(rate(istio_request_duration_milliseconds_sum{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\"}[$__range]) or rate(istio_request_duration_milliseconds_sum{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\"}[$__range]) or rate(istio_request_duration_milliseconds_sum{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\"}[$__range]) or rate(istio_request_duration_milliseconds_sum{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\"}[$__range]), \"server\", \".\", \"destination_canonical_service\", \"destination_workload_namespace\") or label_join(rate(istio_request_duration_milliseconds_sum{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\"}[$__range]) or rate(istio_request_duration_milliseconds_sum{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\"}[$__range]) or rate(istio_request_duration_milliseconds_sum{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\"}[$__range]) or rate(istio_request_duration_milliseconds_sum{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\"}[$__range]), \"server\", \".\", \"destination_service_name\", \"destination_service_namespace\"), \"client\", \".\", \"source_canonical_service\", \"source_workload_namespace\")), \"id\", \"$1\", \"client\", \"(.*)\")) / sum by (id)(label_replace(sum by (client, server)(label_join(label_join(rate(istio_request_duration_milliseconds_count{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\"}[$__range]) or rate(istio_request_duration_milliseconds_count{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\"}[$__range]) or rate(istio_request_duration_milliseconds_count{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\"}[$__range]) or rate(istio_request_duration_milliseconds_count{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service!=\"unknown\"}[$__range]), \"server\", \".\", \"destination_canonical_service\", \"destination_workload_namespace\") or label_join(rate(istio_request_duration_milliseconds_count{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\"}[$__range]) or rate(istio_request_duration_milliseconds_count{cluster=\"$cluster\", reporter=\"source\", destination_service_name!=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\"}[$__range]) or rate(istio_request_duration_milliseconds_count{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", source_canonical_service=~\".*$app.*\", source_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\"}[$__range]) or rate(istio_request_duration_milliseconds_count{cluster=\"$cluster\", reporter=\"destination\", source_canonical_service=\"unknown\", destination_canonical_service=~\".*$app.*\", destination_workload_namespace=~\"$namespace\", destination_canonical_service=\"unknown\"}[$__range]), \"server\", \".\", \"destination_service_name\", \"destination_service_namespace\"), \"client\", \".\", \"source_canonical_service\", \"source_workload_namespace\")), \"id\", \"$1\", \"client\", \"(.*)\"))) >= 0), \"title\", \"$1\", \"id\", \"(.*)\"), \"app\", \"$1\", \"id\", \"(.*)\\\\.[^.]+$\"), \"namespace\", \"$1\", \"id\", \".*\\\\.([^.]+)$\")"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true
+            }
+          }
+        },
+        {
+          "id": "merge",
+          "options": {},
+          "filter": {
+            "id": "byRefId",
+            "options": "e_rate|e_errpct|e_arcfail|e_arcsucc|e_lat"
+          }
+        },
+        {
+          "id": "merge",
+          "options": {},
+          "filter": {
+            "id": "byRefId",
+            "options": "n_rate|n_errpct|n_arcfail|n_arcsucc|n_lat"
+          }
+        },
+        {
+          "id": "calculateField",
+          "options": {
+            "mode": "reduceRow",
+            "reduce": {
+              "include": [
+                "Value #e_rate"
+              ],
+              "reducer": "mean"
+            },
+            "alias": "mainStat",
+            "replaceFields": false
+          },
+          "filter": {
+            "id": "byRefId",
+            "options": "/^merge-e_/"
+          }
+        },
+        {
+          "id": "calculateField",
+          "options": {
+            "mode": "reduceRow",
+            "reduce": {
+              "include": [
+                "Value #e_errpct"
+              ],
+              "reducer": "mean"
+            },
+            "alias": "secondaryStat",
+            "replaceFields": false
+          },
+          "filter": {
+            "id": "byRefId",
+            "options": "/^merge-e_/"
+          }
+        },
+        {
+          "id": "calculateField",
+          "options": {
+            "mode": "reduceRow",
+            "reduce": {
+              "include": [
+                "Value #e_arcfail"
+              ],
+              "reducer": "sum"
+            },
+            "alias": "arc__failed",
+            "replaceFields": false
+          },
+          "filter": {
+            "id": "byRefId",
+            "options": "/^merge-e_/"
+          }
+        },
+        {
+          "id": "calculateField",
+          "options": {
+            "mode": "reduceRow",
+            "reduce": {
+              "include": [
+                "Value #e_arcsucc"
+              ],
+              "reducer": "sum"
+            },
+            "alias": "arc__success",
+            "replaceFields": false
+          },
+          "filter": {
+            "id": "byRefId",
+            "options": "/^merge-e_/"
+          }
+        },
+        {
+          "id": "calculateField",
+          "options": {
+            "mode": "reduceRow",
+            "reduce": {
+              "include": [
+                "Value #e_lat"
+              ],
+              "reducer": "sum"
+            },
+            "alias": "detail__avg_latency_ms",
+            "replaceFields": false
+          },
+          "filter": {
+            "id": "byRefId",
+            "options": "/^merge-e_/"
+          }
+        },
+        {
+          "id": "calculateField",
+          "options": {
+            "mode": "reduceRow",
+            "reduce": {
+              "include": [
+                "Value #n_rate"
+              ],
+              "reducer": "mean"
+            },
+            "alias": "mainStat",
+            "replaceFields": false
+          },
+          "filter": {
+            "id": "byRefId",
+            "options": "/^merge-n_/"
+          }
+        },
+        {
+          "id": "calculateField",
+          "options": {
+            "mode": "reduceRow",
+            "reduce": {
+              "include": [
+                "Value #n_errpct"
+              ],
+              "reducer": "mean"
+            },
+            "alias": "secondaryStat",
+            "replaceFields": false
+          },
+          "filter": {
+            "id": "byRefId",
+            "options": "/^merge-n_/"
+          }
+        },
+        {
+          "id": "calculateField",
+          "options": {
+            "mode": "reduceRow",
+            "reduce": {
+              "include": [
+                "Value #n_arcfail"
+              ],
+              "reducer": "sum"
+            },
+            "alias": "arc__failed",
+            "replaceFields": false
+          },
+          "filter": {
+            "id": "byRefId",
+            "options": "/^merge-n_/"
+          }
+        },
+        {
+          "id": "calculateField",
+          "options": {
+            "mode": "reduceRow",
+            "reduce": {
+              "include": [
+                "Value #n_arcsucc"
+              ],
+              "reducer": "sum"
+            },
+            "alias": "arc__success",
+            "replaceFields": false
+          },
+          "filter": {
+            "id": "byRefId",
+            "options": "/^merge-n_/"
+          }
+        },
+        {
+          "id": "calculateField",
+          "options": {
+            "mode": "reduceRow",
+            "reduce": {
+              "include": [
+                "Value #n_lat"
+              ],
+              "reducer": "sum"
+            },
+            "alias": "detail__avg_latency_ms",
+            "replaceFields": false
+          },
+          "filter": {
+            "id": "byRefId",
+            "options": "/^merge-n_/"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "app"
+            },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "View logs for this app",
+                    "url": "/d/mesh-service-graph/mesh-service-graph-dag?var-cluster=${cluster}&var-app=${__data.fields.app}&var-namespace=${__data.fields.namespace}&${__url_time_range}",
+                    "targetBlank": false
+                  },
+                  {
+                    "title": "실시간 로그 보기 (Explore Live)",
+                    "url": "/explore?orgId=1&panes=%7B%22explore%22%3A%7B%22datasource%22%3A%22loki%22%2C%22queries%22%3A%5B%7B%22refId%22%3A%22A%22%2C%22datasource%22%3A%7B%22type%22%3A%22loki%22%2C%22uid%22%3A%22loki%22%7D%2C%22expr%22%3A%22%7Bcluster%3D%5C%22${cluster}%5C%22%2C%20namespace%3D%5C%22${__data.fields.namespace}%5C%22%2C%20app%3D%5C%22${__data.fields.app}%5C%22%7D%22%7D%5D%2C%22range%22%3A%7B%22from%22%3A%22now-5m%22%2C%22to%22%3A%22now%22%7D%7D%7D&schemaVersion=1",
+                    "targetBlank": true
+                  },
+                  {
+                    "title": "트레이스 보기 (Tempo)",
+                    "url": "/explore?orgId=1&schemaVersion=1&panes=%7B%22t%22%3A%7B%22datasource%22%3A%22tempo%22%2C%22queries%22%3A%5B%7B%22refId%22%3A%22A%22%2C%22datasource%22%3A%7B%22type%22%3A%22tempo%22%2C%22uid%22%3A%22tempo%22%7D%2C%22queryType%22%3A%22traceql%22%2C%22query%22%3A%22%7B%20resource.service.name%20%3D%20%5C%22${__data.fields.id}%5C%22%20%7D%22%2C%22limit%22%3A50%2C%22tableType%22%3A%22traces%22%7D%5D%2C%22range%22%3A%7B%22from%22%3A%22${__from}%22%2C%22to%22%3A%22${__to}%22%7D%7D%7D",
+                    "targetBlank": true
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "mainStat"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "reqps"
+              },
+              {
+                "id": "decimals",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "secondaryStat"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percent"
+              },
+              {
+                "id": "decimals",
+                "value": 2
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "arc__success"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "green"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "arc__failed"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "red"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "detail__avg_latency_ms"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "ms"
+              },
+              {
+                "id": "decimals",
+                "value": 1
+              },
+              {
+                "id": "displayName",
+                "value": "평균 응답시간"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "mainStat"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "요청/분"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "secondaryStat"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "에러 %"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "arc__success"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "성공 비율"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "arc__failed"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "실패 비율"
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "nodes": {
+          "mainStatUnit": "req/min",
+          "secondaryStatUnit": "% err",
+          "arcs": [
+            {
+              "field": "arc__success",
+              "color": "green"
+            },
+            {
+              "field": "arc__failed",
+              "color": "red"
+            }
+          ]
+        },
+        "edges": {
+          "mainStatUnit": "req/min",
+          "secondaryStatUnit": "% err"
+        }
+      },
+      "description": "Istio 메트릭으로 그린 서비스 간 호출 관계. 샘플링과 무관하게 모든 요청을 센다. 노드 링의 초록/빨강은 성공/5xx 비율, 노드 수치는 받은 요청 기준(게이트웨이처럼 받은 요청이 없으면 보낸 요청 기준)이다. 노드 클릭 메뉴에서 해당 앱 로그와 트레이스로 이동한다. 사이드카 없는 호출자는 unknown.unknown으로, 엔드포인트가 없거나 사이드카가 없는 대상은 Service 이름으로 보인다. BlackHoleCluster·PassthroughCluster는 메시 밖 주소를 부른 것이다. 경로가 없는 요청(404 NR)은 뺀다."
+    },
+    {
+      "type": "row",
+      "id": 19,
+      "title": "서비스별 요청 · 에러 · 응답시간 (Istio 메트릭)",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 25
+      }
+    },
+    {
+      "type": "timeseries",
+      "id": 20,
+      "title": "요청/초",
+      "description": "서비스(서버 쪽)별 요청률.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "mimir"
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 8,
+        "x": 0,
+        "y": 26
+      },
+      "targets": [
+        {
+          "legendFormat": "{{destination_canonical_service}}",
+          "refId": "A",
+          "expr": "sum by (destination_canonical_service) (rate(istio_requests_total{cluster=\"$cluster\", reporter=\"destination\", destination_workload_namespace=~\"$namespace\", destination_canonical_service=~\".*$app.*\"}[$__rate_interval]))",
+          "interval": "1m",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "mimir"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 0,
+            "showPoints": "never",
+            "axisSoftMin": 0,
+            "gradientMode": "none",
+            "spanNulls": false
+          },
+          "noValue": "트래픽 없음",
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": [
+            "mean",
+            "max"
+          ],
+          "sortBy": "Mean",
+          "sortDesc": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "type": "timeseries",
+      "id": 21,
+      "title": "5xx 에러율",
+      "description": "서비스별 5xx 비율. 요청이 있는데 5xx가 없으면 0.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "mimir"
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 8,
+        "x": 8,
+        "y": 26
+      },
+      "targets": [
+        {
+          "legendFormat": "{{destination_canonical_service}}",
+          "refId": "A",
+          "expr": "(sum by (destination_canonical_service) (rate(istio_requests_total{cluster=\"$cluster\", reporter=\"destination\", destination_workload_namespace=~\"$namespace\", destination_canonical_service=~\".*$app.*\", response_code=~\"5..\"}[$__rate_interval])) or sum by (destination_canonical_service) (rate(istio_requests_total{cluster=\"$cluster\", reporter=\"destination\", destination_workload_namespace=~\"$namespace\", destination_canonical_service=~\".*$app.*\"}[$__rate_interval])) * 0) / sum by (destination_canonical_service) (rate(istio_requests_total{cluster=\"$cluster\", reporter=\"destination\", destination_workload_namespace=~\"$namespace\", destination_canonical_service=~\".*$app.*\"}[$__rate_interval])) * 100",
+          "interval": "1m",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "mimir"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 0,
+            "showPoints": "never",
+            "axisSoftMin": 0,
+            "gradientMode": "none",
+            "spanNulls": false,
+            "axisSoftMax": 5
+          },
+          "noValue": "트래픽 없음",
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": [
+            "mean",
+            "max"
+          ],
+          "sortBy": "Mean",
+          "sortDesc": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "type": "timeseries",
+      "id": 22,
+      "title": "P95 응답시간",
+      "description": "서비스별 95번째 백분위 응답시간 (서버 사이드카 기준).",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "mimir"
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 8,
+        "x": 16,
+        "y": 26
+      },
+      "targets": [
+        {
+          "legendFormat": "{{destination_canonical_service}}",
+          "refId": "A",
+          "expr": "histogram_quantile(0.95, sum by (le, destination_canonical_service) (rate(istio_request_duration_milliseconds_bucket{cluster=\"$cluster\", reporter=\"destination\", destination_workload_namespace=~\"$namespace\", destination_canonical_service=~\".*$app.*\"}[$__rate_interval])))",
+          "interval": "1m",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "mimir"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 0,
+            "showPoints": "never",
+            "axisSoftMin": 0,
+            "gradientMode": "none",
+            "spanNulls": false
+          },
+          "noValue": "트래픽 없음",
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": [
+            "mean",
+            "max"
+          ],
+          "sortBy": "Mean",
+          "sortDesc": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "type": "timeseries",
+      "id": 23,
+      "title": "응답 코드 분포",
+      "description": "응답 코드 계열별 요청률(누적). 0xx는 응답 없이 끊긴 요청(연결 리셋 등).",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "mimir"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 8,
+        "x": 0,
+        "y": 36
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "legendFormat": "{{code}}",
+          "expr": "sum by (code) (label_replace(rate(istio_requests_total{cluster=\"$cluster\", reporter=\"destination\", destination_workload_namespace=~\"$namespace\", destination_canonical_service=~\".*$app.*\"}[$__rate_interval]), \"code\", \"${1}xx\", \"response_code\", \"([0-9]).*\"))",
+          "interval": "1m",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "mimir"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "custom": {
+            "drawStyle": "bars",
+            "lineWidth": 1,
+            "fillOpacity": 80,
+            "showPoints": "never",
+            "axisSoftMin": 0,
+            "gradientMode": "none",
+            "spanNulls": false,
+            "stacking": {
+              "mode": "normal",
+              "group": "A"
+            }
+          },
+          "noValue": "트래픽 없음",
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "2xx"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "green"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "3xx"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "blue"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "4xx"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "orange"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "5xx"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "red"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "0xx"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "purple"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": [
+            "mean"
+          ],
+          "sortBy": "Mean",
+          "sortDesc": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "type": "table",
+      "id": 24,
+      "title": "서비스 요약 (선택 구간 전체)",
+      "description": "서비스별 요청률·5xx 비율·응답시간 백분위. 5xx 1%/5%, P95 500ms/1s에서 색이 바뀐다.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "mimir"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 16,
+        "x": 8,
+        "y": 36
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (destination_canonical_service, destination_workload_namespace) (rate(istio_requests_total{cluster=\"$cluster\", reporter=\"destination\", destination_workload_namespace=~\"$namespace\", destination_canonical_service=~\".*$app.*\"}[$__range]))",
+          "instant": true,
+          "range": false,
+          "format": "table",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "mimir"
+          }
+        },
+        {
+          "refId": "B",
+          "expr": "(sum by (destination_canonical_service, destination_workload_namespace) (rate(istio_requests_total{cluster=\"$cluster\", reporter=\"destination\", destination_workload_namespace=~\"$namespace\", destination_canonical_service=~\".*$app.*\", response_code=~\"5..\"}[$__range])) or sum by (destination_canonical_service, destination_workload_namespace) (rate(istio_requests_total{cluster=\"$cluster\", reporter=\"destination\", destination_workload_namespace=~\"$namespace\", destination_canonical_service=~\".*$app.*\"}[$__range])) * 0) / sum by (destination_canonical_service, destination_workload_namespace) (rate(istio_requests_total{cluster=\"$cluster\", reporter=\"destination\", destination_workload_namespace=~\"$namespace\", destination_canonical_service=~\".*$app.*\"}[$__range])) * 100",
+          "instant": true,
+          "range": false,
+          "format": "table",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "mimir"
+          }
+        },
+        {
+          "refId": "C",
+          "expr": "histogram_quantile(0.50, sum by (le, destination_canonical_service, destination_workload_namespace) (rate(istio_request_duration_milliseconds_bucket{cluster=\"$cluster\", reporter=\"destination\", destination_workload_namespace=~\"$namespace\", destination_canonical_service=~\".*$app.*\"}[$__range])))",
+          "instant": true,
+          "range": false,
+          "format": "table",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "mimir"
+          }
+        },
+        {
+          "refId": "D",
+          "expr": "histogram_quantile(0.95, sum by (le, destination_canonical_service, destination_workload_namespace) (rate(istio_request_duration_milliseconds_bucket{cluster=\"$cluster\", reporter=\"destination\", destination_workload_namespace=~\"$namespace\", destination_canonical_service=~\".*$app.*\"}[$__range])))",
+          "instant": true,
+          "range": false,
+          "format": "table",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "mimir"
+          }
+        },
+        {
+          "refId": "E",
+          "expr": "histogram_quantile(0.99, sum by (le, destination_canonical_service, destination_workload_namespace) (rate(istio_request_duration_milliseconds_bucket{cluster=\"$cluster\", reporter=\"destination\", destination_workload_namespace=~\"$namespace\", destination_canonical_service=~\".*$app.*\"}[$__range])))",
+          "instant": true,
+          "range": false,
+          "format": "table",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "mimir"
+          }
+        }
+      ],
+      "transformations": [
+        {
+          "id": "merge",
+          "options": {}
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true
+            },
+            "indexByName": {
+              "destination_canonical_service": 0,
+              "destination_workload_namespace": 1,
+              "Value #A": 2,
+              "Value #B": 3,
+              "Value #C": 4,
+              "Value #D": 5,
+              "Value #E": 6
+            },
+            "renameByName": {
+              "destination_canonical_service": "서비스",
+              "destination_workload_namespace": "네임스페이스",
+              "Value #A": "요청/초",
+              "Value #B": "5xx %",
+              "Value #C": "P50",
+              "Value #D": "P95",
+              "Value #E": "P99"
+            }
+          }
+        },
+        {
+          "id": "sortBy",
+          "options": {
+            "sort": [
+              {
+                "field": "요청/초",
+                "desc": true
+              }
+            ]
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            }
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "서비스"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 230
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "네임스페이스"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 150
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "요청/초"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "reqps"
+              },
+              {
+                "id": "decimals",
+                "value": 3
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "5xx %"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percent"
+              },
+              {
+                "id": "decimals",
+                "value": 2
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "value": 1,
+                      "color": "orange"
+                    },
+                    {
+                      "value": 5,
+                      "color": "red"
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "thresholds"
+                }
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "^P(50|95|99)$"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "ms"
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              },
+              {
+                "id": "custom.width",
+                "value": 85
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "P95"
+            },
+            "properties": [
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "value": 500,
+                      "color": "orange"
+                    },
+                    {
+                      "value": 1000,
+                      "color": "red"
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "thresholds"
+                }
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        }
+      }
+    },
+    {
+      "type": "row",
+      "id": 25,
+      "title": "트레이스 (Tempo) — Trace ID를 누르면 전체 호출 흐름(waterfall)·스팬 상세·관련 로그",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 45
+      }
+    },
+    {
+      "type": "table",
+      "id": 26,
+      "title": "최근 트레이스",
+      "description": "선택한 클러스터/네임스페이스/앱의 최근 트레이스 50개.",
+      "datasource": {
+        "type": "tempo",
+        "uid": "tempo"
+      },
+      "gridPos": {
+        "h": 14,
+        "w": 12,
+        "x": 0,
+        "y": 46
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tempo",
+            "uid": "tempo"
+          },
+          "queryType": "traceql",
+          "query": "{ resource.cluster = \"$cluster\" && span.istio.namespace =~ \"${namespace:regex}\" && resource.service.name =~ \".*$app.*\" }",
+          "limit": 50,
+          "spss": 3,
+          "tableType": "traces"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            }
+          },
+          "noValue": "트레이스 없음"
+        },
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        }
+      }
+    },
+    {
+      "type": "table",
+      "id": 27,
+      "title": "에러 · 느린 트레이스 (에러 또는 500ms 초과)",
+      "description": "스팬 상태가 error(5xx 등)이거나 500ms를 넘은 트레이스.",
+      "datasource": {
+        "type": "tempo",
+        "uid": "tempo"
+      },
+      "gridPos": {
+        "h": 14,
+        "w": 12,
+        "x": 12,
+        "y": 46
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tempo",
+            "uid": "tempo"
+          },
+          "queryType": "traceql",
+          "query": "{ resource.cluster = \"$cluster\" && span.istio.namespace =~ \"${namespace:regex}\" && resource.service.name =~ \".*$app.*\" && (status = error || duration > 500ms) }",
+          "limit": 50,
+          "spss": 3,
+          "tableType": "traces"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            }
+          },
+          "noValue": "트레이스 없음"
+        },
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        }
+      }
+    },
+    {
+      "type": "row",
+      "id": 28,
+      "title": "로그 (Loki) — 앱 파드 로그, istio/monitoring 제외",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 60
+      }
+    },
+    {
+      "type": "timeseries",
+      "id": 29,
+      "title": "로그 볼륨 (앱별)",
+      "description": "앱별 로그 줄 수. 급증은 장애·재시도 폭주의 신호.",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "interval": "1m",
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 0,
+        "y": 61
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "queryType": "range",
+          "legendFormat": "{{app}}",
+          "expr": "sum by (app) (count_over_time({cluster=\"$cluster\", namespace=~\"$namespace\", app=~\"$app.*\", app!=\"k8s-events\"} [$__auto]))",
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "bars",
+            "lineWidth": 1,
+            "fillOpacity": 80,
+            "showPoints": "never",
+            "axisSoftMin": 0,
+            "gradientMode": "none",
+            "spanNulls": false,
+            "stacking": {
+              "mode": "normal",
+              "group": "A"
+            }
+          },
+          "noValue": "로그 없음",
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": [
+            "sum"
+          ],
+          "sortBy": "Mean",
+          "sortDesc": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "type": "timeseries",
+      "id": 30,
+      "title": "에러 로그 (앱별)",
+      "description": "error/exception/fatal 이 들어간 줄 수 (대소문자 무시).",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "interval": "1m",
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 12,
+        "y": 61
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "queryType": "range",
+          "legendFormat": "{{app}}",
+          "expr": "sum by (app) (count_over_time({cluster=\"$cluster\", namespace=~\"$namespace\", app=~\"$app.*\", app!=\"k8s-events\"} |~ \"(?i)(error|exception|fatal)\" [$__auto]))",
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "bars",
+            "lineWidth": 1,
+            "fillOpacity": 80,
+            "showPoints": "never",
+            "axisSoftMin": 0,
+            "gradientMode": "none",
+            "spanNulls": false,
+            "stacking": {
+              "mode": "normal",
+              "group": "A"
+            }
+          },
+          "noValue": "에러 로그 없음",
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": [
+            "sum"
+          ],
+          "sortBy": "Mean",
+          "sortDesc": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 3,
+      "type": "logs",
+      "title": "로그: $app ($namespace, $cluster)",
+      "gridPos": {
+        "h": 14,
+        "w": 24,
+        "x": 0,
+        "y": 68
+      },
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "{cluster=\"$cluster\", namespace=~\"$namespace\", app=~\"$app.*\", app!=\"k8s-events\"} |~ \"$search\""
+        }
+      ],
+      "options": {
+        "showTime": true,
+        "sortOrder": "Descending",
+        "wrapLogMessage": true,
+        "enableLogDetails": true
+      },
+      "description": "상단 \"로그 검색\" 칸에 정규식을 넣으면 그 줄만 보인다 (예: (?i)timeout)."
+    }
+  ],
+  "description": "클러스터별 서비스 메시 상태 — 요청/에러/응답시간·서비스 그래프(Istio 메트릭), 트레이스(Tempo), 로그(Loki).",
+  "tags": [
+    "mesh",
+    "istio",
+    "lgtm"
+  ],
+  "graphTooltip": 1,
+  "links": [
+    {
+      "title": "쿠버네티스 클러스터 상태",
+      "type": "link",
+      "url": "/d/k8s-cluster",
+      "icon": "dashboard",
+      "keepTime": true,
+      "includeVars": false,
+      "targetBlank": false,
+      "tooltip": "",
+      "asDropdown": false,
+      "tags": []
+    }
+  ]
+}

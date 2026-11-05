@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  labels:
+    app.kubernetes.io/name: loki
+  name: loki-pvc
+  namespace: monitoring
+spec:
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      # 두 app-cluster(dev+prod) 로그가 전부 모이는 중앙 저장소라 단일클러스터
+      # 데모(10Gi)보다 넉넉하게 잡음. 실제 로그량 보고 조정할 것.
+      storage: 100Gi
+  # env의 STORAGE_CLASS (configure.sh가 채운다)
+  storageClassName: REPLACE_ME_STORAGE_CLASS
+  volumeMode: Filesystem

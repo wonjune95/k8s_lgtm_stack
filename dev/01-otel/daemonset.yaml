@@ -1,0 +1,156 @@
+# otel-collector DaemonSet. CLUSTER_NAME(이 클러스터 이름)과 push 토큰 3개(secret.yaml)를 env로 받는다.
+# 이미지는 upstream otel/opentelemetry-collector-contrib를 digest로 고정했고 command를 덮어쓰지 않는다
+# (ENTRYPOINT가 바뀐 이미지가 들어오면 조용히 돌지 않고 바로 CrashLoop이 나도록).
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  labels:
+    app.kubernetes.io/name: otel-collector
+  name: otel-collector
+  namespace: monitoring
+spec:
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: otel-collector
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: otel-collector
+      # otel 자기 메트릭(:8888)을 자기 노드의 prometheus receiver가 스크레이핑
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8888"
+    spec:
+      containers:
+      - args:
+        - --config=/conf/config.yaml
+        env:
+        - name: NODE_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.hostIP
+        - name: NODE_NAME
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: spec.nodeName
+        # 이 클러스터의 고유 식별자 — mgmt BasicAuth 사용자명·cluster 라벨과 같아야 한다
+        - name: CLUSTER_NAME
+          value: "dev"
+        - name: LOKI_PUSH_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: mgmt-push-auth
+              key: LOKI_PUSH_TOKEN
+        - name: MIMIR_PUSH_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: mgmt-push-auth
+              key: MIMIR_PUSH_TOKEN
+        - name: TEMPO_PUSH_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: mgmt-push-auth
+              key: TEMPO_PUSH_TOKEN
+        # 이미지 경로: images/README.md 절차대로 내부 레지스트리에 적재 후 교체
+        image: docker.io/otel/opentelemetry-collector-contrib:0.151.0@sha256:d57bfe8eee2378f31cb1193239fbcac521d54a5a071fca2bfc106916a32b892d
+        imagePullPolicy: IfNotPresent
+        name: otel-collector
+        ports:
+        - containerPort: 4317
+          name: otlp-grpc
+          protocol: TCP
+        - containerPort: 4318
+          name: otlp-http
+          protocol: TCP
+        - containerPort: 9411
+          name: zipkin
+          protocol: TCP
+        - containerPort: 13133
+          name: health
+          protocol: TCP
+        - containerPort: 8888
+          name: metrics
+          protocol: TCP
+        livenessProbe:
+          httpGet:
+            path: /
+            port: health
+          periodSeconds: 10
+          failureThreshold: 6
+        readinessProbe:
+          httpGet:
+            path: /
+            port: health
+          periodSeconds: 10
+        # 실측(2노드, 2026-11 — 로그량 보고 조정): CPU ~15m, 메모리 80~125Mi.
+        # memory_limiter(cm.yaml)가 limit의 80%에서 backpressure를 건다.
+        # CPU request는 실측보다 조금 위로만 잡는다 — 노드 request가 꽉 찬 클러스터에서
+        # (dev node-0: 99%) 100m이면 DaemonSet 파드가 Pending으로 그 노드 수집이 끊김.
+        resources:
+          requests:
+            cpu: 25m
+            memory: 256Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+        # 로그 디렉토리는 GID 0 그룹 권한으로 읽으므로 capability가 필요 없다. otel은 파일을 쓰지 않는다.
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop: [ALL]
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+        volumeMounts:
+        - mountPath: /conf
+          name: config
+        - mountPath: /var/log/pods
+          name: varlogpods
+          readOnly: true
+        - mountPath: /etc/mgmt-ca
+          name: mgmt-ca
+          readOnly: true
+        - mountPath: /var/lib/otelcol
+          name: buffer
+      dnsPolicy: ClusterFirst
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      # /var/log/pods가 750(drwxr-x---, owner/group=root, other=권한없음)으로
+      # 잠겨있는 클러스터가 많아서, GID가 0(root)이어야 filelog receiver가
+      # 디렉토리를 읽을 수 있다 (UID를 뭘로
+      # 바꿔도 소용없고 GID만 0이면 됨). runAsUser는 비root 유지.
+      securityContext:
+        fsGroup: 65534
+        runAsGroup: 0
+        runAsNonRoot: true
+        runAsUser: 65534
+      serviceAccount: otel-collector
+      serviceAccountName: otel-collector
+      terminationGracePeriodSeconds: 30
+      tolerations:
+      - effect: NoSchedule
+        key: node-role.kubernetes.io/control-plane
+      volumes:
+      - configMap:
+          defaultMode: 420
+          name: otel-collector
+        name: config
+      - hostPath:
+          path: /var/log/pods
+          type: ''
+        name: varlogpods
+      - configMap:
+          name: mgmt-ca
+        name: mgmt-ca
+      # 전송 큐(로그·트레이스)와 로그 읽기 위치 — 파드와 수명이 같다. 큐 상한(cm.yaml)이 이 크기보다 작아야
+      # 한다(넘으면 kubelet이 파드를 축출해 큐가 통째로 사라짐).
+      - name: buffer
+        emptyDir:
+          sizeLimit: 2Gi
+  updateStrategy:
+    rollingUpdate:
+      maxSurge: 0
+      maxUnavailable: 1
+    type: RollingUpdate

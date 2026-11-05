@@ -1,0 +1,33 @@
+# Loki의 /otlp push 엔드포인트를 dev/prod 클러스터가 외부에서 접근할 수 있게 노출.
+# basicauth-middleware.yaml의 Middleware를 filter로 걸어서 인증 없이는 못 들어오게 함.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: loki-push-route
+  namespace: monitoring
+spec:
+  hostnames:
+  # 내부 DNS에 등록된 mgmt 도메인 (env의 LOKI_DOMAIN)
+  - REPLACE_ME_LOKI_DOMAIN
+  parentRefs:
+  - group: gateway.networking.k8s.io
+    kind: Gateway
+    name: REPLACE_ME_GATEWAY_NAME
+    namespace: REPLACE_ME_GATEWAY_NAMESPACE
+  rules:
+  - filters:
+    - type: ExtensionRef
+      extensionRef:
+        group: traefik.io
+        kind: Middleware
+        name: loki-push-basicauth
+    backendRefs:
+    - group: ''
+      kind: Service
+      name: loki
+      port: 3100
+      weight: 1
+    matches:
+    - path:
+        type: PathPrefix
+        value: /otlp

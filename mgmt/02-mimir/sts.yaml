@@ -1,0 +1,95 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  labels:
+    app.kubernetes.io/name: mimir
+  name: mimir
+  namespace: monitoring
+spec:
+  persistentVolumeClaimRetentionPolicy:
+    whenDeleted: Retain
+    whenScaled: Retain
+  podManagementPolicy: OrderedReady
+  replicas: 1
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: mimir
+  serviceName: mimir
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: mimir
+    spec:
+      containers:
+      - args:
+        - -config.file=/etc/mimir/mimir.yaml
+        # 이미지는 digest로 고정한다 — 태그만 쓰면 레지스트리 태그가 바뀌었을 때 다른 이미지가 배포된다
+        image: docker.io/grafana/mimir:2.11.0@sha256:5758a0c571db4fd01990277ec58daecfd2cc299875486687d72843a21a80a345
+        imagePullPolicy: IfNotPresent
+        name: mimir
+        ports:
+        - containerPort: 9009
+          name: http
+          protocol: TCP
+        readinessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /ready
+            port: http
+            scheme: HTTP
+          initialDelaySeconds: 15
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 1
+        resources:
+          limits:
+            cpu: '2'
+            memory: 2Gi
+          requests:
+            cpu: 500m
+            memory: 512Mi
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+        volumeMounts:
+        - mountPath: /etc/mimir
+          name: config
+        - mountPath: /data
+          name: storage
+        workingDir: /data
+      dnsPolicy: ClusterFirst
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      securityContext:
+        fsGroup: 10001
+        runAsGroup: 10001
+        runAsNonRoot: true
+        runAsUser: 10001
+      terminationGracePeriodSeconds: 30
+      volumes:
+      - configMap:
+          defaultMode: 420
+          name: mimir
+        name: config
+  updateStrategy:
+    rollingUpdate:
+      partition: 0
+    type: RollingUpdate
+  volumeClaimTemplates:
+  - apiVersion: v1
+    kind: PersistentVolumeClaim
+    metadata:
+      name: storage
+    spec:
+      accessModes:
+      - ReadWriteOnce
+      resources:
+        requests:
+          # 두 app-cluster 메트릭이 전부 모이는 중앙 저장소라 단일클러스터
+          # 데모(50Gi)보다 넉넉하게 잡음. 실제 cardinality 보고 조정할 것.
+          storage: 100Gi
+      # env의 STORAGE_CLASS (configure.sh가 채운다)
+      storageClassName: REPLACE_ME_STORAGE_CLASS
+      volumeMode: Filesystem
+    status:
+      phase: Pending

@@ -1,0 +1,127 @@
+# Grafana 프로비저닝(데이터소스 3개·대시보드 provider)과 grafana.ini.
+#  - 데이터소스: Loki, Mimir(prometheus), Tempo(중앙 Tempo — 각 클러스터 otel이 원본 트레이스를 push).
+#    트레이스 → 로그(Loki) 연결 포함. 전부 readOnly.
+#  - 기본 홈 대시보드는 mesh-service-graph.json
+#  - OAuth 블록은 기본 enabled=false — 내부 OAuth 공급자가 있으면 true로 바꾸고 REPLACE_ME_OAUTH 값을 채운다.
+#    없으면 그대로 둬도 된다 (admin 로그인은 이 설정과 무관)
+apiVersion: v1
+data:
+  dashboards.yaml: |
+    apiVersion: 1
+    providers:
+      - name: kubernetes
+        orgId: 1
+        folder: Kubernetes
+        folderUid: kubernetes
+        type: file
+        disableDeletion: true
+        updateIntervalSeconds: 30
+        allowUiUpdates: false
+        options:
+          path: /var/lib/grafana/dashboards/kubernetes
+          foldersFromFilesStructure: false
+  datasources.yaml: |
+    apiVersion: 1
+    datasources:
+      - name: Loki
+        uid: loki
+        type: loki
+        access: proxy
+        url: http://loki.monitoring.svc.cluster.local:3100
+        editable: false
+        jsonData:
+          maxLines: 1000
+      - name: Mimir
+        uid: mimir
+        type: prometheus
+        access: proxy
+        url: http://mimir.monitoring.svc.cluster.local:9009/prometheus
+        isDefault: true
+        editable: false
+        jsonData:
+          prometheusType: Mimir
+          httpMethod: POST
+          # app 클러스터 otel-collector의 스크레이프 간격. 이걸 안 주면 Grafana가 15s로 가정해
+          # $__rate_interval=1m → 샘플 1개라 rate()가 빈다
+          timeInterval: 1m
+      - name: Tempo
+        uid: tempo
+        type: tempo
+        access: proxy
+        url: http://tempo.monitoring.svc.cluster.local:3200
+        editable: false
+        jsonData:
+          search:
+            hide: false
+          nodeGraph:
+            enabled: true
+          # 스팬 → 그 시각 전후 해당 앱 로그 (Envoy 스팬의 istio.* 태그를 Loki 라벨로 매핑)
+          tracesToLogsV2:
+            datasourceUid: loki
+            spanStartTimeShift: -5m
+            spanEndTimeShift: 5m
+            filterByTraceID: false
+            filterBySpanID: false
+            tags:
+              - key: cluster
+                value: cluster
+              - key: istio.namespace
+                value: namespace
+              - key: istio.canonical_service
+                value: app
+  grafana.ini: |
+    [analytics]
+    check_for_updates = false
+
+    [log]
+    mode = console
+
+    [paths]
+    data = /var/lib/grafana
+    logs = /var/log/grafana
+    plugins = /var/lib/grafana/plugins
+    provisioning = /etc/grafana/provisioning
+
+    [dashboards]
+    default_home_dashboard_path = /var/lib/grafana/dashboards/kubernetes/mesh-service-graph.json
+
+    [server]
+    # 내부 DNS에 등록된 mgmt Grafana 도메인 (env의 GRAFANA_DOMAIN)
+    domain = REPLACE_ME_GRAFANA_DOMAIN
+    root_url = https://REPLACE_ME_GRAFANA_DOMAIN
+    serve_from_sub_path = true
+
+    # 내부 OAuth 공급자(Gitea 등)가 있을 때만 사용. 기본은 꺼둠 —
+    # admin-user/admin-password(secret.yaml)로 직접 로그인하면 됨.
+    [auth.generic_oauth]
+    enabled = false
+    auto_login = false
+    name = REPLACE_ME_OAUTH_PROVIDER_NAME
+    allow_sign_up = true
+    client_id = "REPLACE_ME"
+    client_secret = "REPLACE_ME"
+    scopes = openid email profile groups
+    auth_url = https://REPLACE_ME_OAUTH_DOMAIN/login/oauth/authorize
+    token_url = https://REPLACE_ME_OAUTH_DOMAIN/login/oauth/access_token
+    api_url = https://REPLACE_ME_OAUTH_DOMAIN/login/oauth/userinfo
+    email_attribute_path = email
+    login_attribute_path = preferred_username
+    name_attribute_path = name
+    groups_attribute_path = groups
+    role_attribute_path = contains(groups, 'oauth_organization:admins') && 'GrafanaAdmin' || 'Viewer'
+    allow_assign_grafana_admin = true
+    # OAuth 공급자 인증서는 검증한다 — 사설 CA면 Grafana 컨테이너 신뢰 저장소에 CA를 넣을 것
+    tls_skip_verify_insecure = false
+
+    [users]
+    auto_assign_org = true
+    auto_assign_org_role = Viewer
+
+    [security]
+    # root_url이 https라 세션 쿠키도 Secure로 (Traefik이 TLS 종료)
+    cookie_secure = true
+    cookie_samesite = lax
+kind: ConfigMap
+metadata:
+  name: grafana
+  namespace: monitoring

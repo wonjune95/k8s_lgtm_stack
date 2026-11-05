@@ -1,0 +1,12 @@
+# mgmt push 엔드포인트(Loki /otlp, Mimir /api/v1/push) 인증서를 발급한 CA.
+# otel-collector가 이 CA로 서버 인증서를 검증한다 (insecure_skip_verify 안 씀).
+# 루트의 configure.sh가 env의 MGMT_CA_PEM(PEM 파일)으로 build/ 에 채운다. 손으로 만들려면:
+#   kubectl create configmap mgmt-ca -n monitoring --from-file=ca.crt=<CA.pem> --dry-run=client -o yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mgmt-ca
+  namespace: monitoring
+data:
+  ca.crt: |
+    REPLACE_ME_MGMT_CA_PEM

@@ -1,0 +1,33 @@
+# 중앙 Tempo — dev/prod의 원본 트레이스를 모아 Grafana에서 검색·조회(Jaeger처럼)한다.
+# 서비스 그래프는 Istio 메트릭으로 그리므로 metrics_generator를 켜지 않는다. 수신은 OTLP만.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: tempo
+  namespace: monitoring
+data:
+  tempo.yaml: |
+    server:
+      http_listen_port: 3200
+
+    distributor:
+      receivers:
+        otlp:
+          protocols:
+            http:
+              endpoint: 0.0.0.0:4318
+            grpc:
+              endpoint: 0.0.0.0:4317
+
+    storage:
+      trace:
+        backend: local
+        local:
+          path: /var/tempo/traces
+        wal:
+          path: /var/tempo/wal
+
+    compactor:
+      compaction:
+        # 원본 트레이스 보관 15일. PVC(sts.yaml) 용량과 같이 조정할 것.
+        block_retention: 360h   # 원본 트레이스 15일

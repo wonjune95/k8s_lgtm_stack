@@ -1,0 +1,4 @@
+# 환경값·비밀값·렌더링 결과 — 커밋하지 않는다
+env
+secrets.env
+build/

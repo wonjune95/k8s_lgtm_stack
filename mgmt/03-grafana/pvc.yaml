@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  labels:
+    app.kubernetes.io/name: grafana
+  name: grafana-pvc
+  namespace: monitoring
+spec:
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 30Gi
+  # env의 STORAGE_CLASS (configure.sh가 채운다)
+  storageClassName: REPLACE_ME_STORAGE_CLASS
+  volumeMode: Filesystem
